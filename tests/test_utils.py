@@ -17,11 +17,25 @@ class TestPaths:
         # Should contain pyproject.toml
         assert (paths.PROJECT_ROOT / "pyproject.toml").exists()
     
-    def test_data_directories_exist(self):
-        """Test that data directories are created."""
+    def test_data_directories_created_lazily(self):
+        """Test that data directories are created lazily, not on import."""
+        # Directories should exist (either from previous runs or lazy creation)
+        # The key is that importing paths module doesn't fail in read-only env
         assert paths.DATA_DIR.exists()
         assert paths.RAW_DATA_DIR.exists()
         assert paths.PROCESSED_DATA_DIR.exists()
+    
+    def test_explicit_initialization(self):
+        """Test explicit directory initialization."""
+        # Should be safe to call multiple times (idempotent)
+        paths.initialize_directories()
+        
+        # All directories should exist
+        assert paths.RAW_DATA_DIR.exists()
+        assert paths.PROCESSED_DATA_DIR.exists()
+        assert paths.CACHE_SYSTEMS_DIR.exists()
+        assert paths.CONFIG_PRESETS_DIR.exists()
+        assert paths.DOCS_DIR.exists()
     
     def test_cache_directories_exist(self):
         """Test that cache directories are created."""

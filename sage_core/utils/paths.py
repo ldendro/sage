@@ -106,8 +106,11 @@ def initialize_directories() -> None:
     """
     Initialize all required directories.
     
-    This should be called once during setup to ensure all directories exist.
-    Creates directories with .gitkeep files where appropriate.
+    This should be called explicitly during development setup or by the application
+    at startup. NOT called on import to avoid PermissionError in read-only environments
+    (e.g., site-packages, Docker containers, CI/CD).
+    
+    For normal usage, directories are created lazily via ensure_dir() when first accessed.
     """
     # Ensure all directories exist
     ensure_dir(RAW_DATA_DIR)
@@ -123,5 +126,5 @@ def initialize_directories() -> None:
             gitkeep.touch()
 
 
-# Initialize directories on import (safe, idempotent)
-initialize_directories()
+# NOTE: We do NOT call initialize_directories() on import to avoid PermissionError
+# in read-only environments. Directories are created lazily when first accessed.
