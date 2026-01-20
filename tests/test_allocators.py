@@ -151,6 +151,28 @@ class TestComputeInverseVolWeights:
         with pytest.raises(ValueError, match="max_weight must be <= 1.0"):
             compute_inverse_vol_weights(returns_wide, max_weight=1.5)
     
+    def test_inverse_vol_max_weight_too_small_for_assets(self):
+        """Test that max_weight < 1/n_assets raises ValueError."""
+        data = load_universe(
+            universe=["SPY", "QQQ", "IWM"],  # 3 assets
+            start_date="2020-01-01",
+            end_date="2020-01-31",
+        )
+        strategy_output = run_passthrough_v1(data)
+        returns_wide = align_asset_returns(strategy_output)
+        
+        # max_weight = 0.3 < 1/3 = 0.333... would cause underinvestment
+        with pytest.raises(ValueError, match="max_weight.*too small.*assets"):
+            compute_inverse_vol_weights(returns_wide, max_weight=0.3)
+        
+        # max_weight = 0.33 < 1/3 should also fail
+        with pytest.raises(ValueError, match="max_weight.*too small.*assets"):
+            compute_inverse_vol_weights(returns_wide, max_weight=0.33)
+        
+        # max_weight = 0.34 > 1/3 should work
+        weights = compute_inverse_vol_weights(returns_wide, max_weight=0.34)
+        assert weights is not None
+    
     def test_inverse_vol_single_asset(self):
         """Test inverse vol with single asset."""
         data = load_universe(

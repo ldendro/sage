@@ -56,6 +56,18 @@ def compute_inverse_vol_weights(
     if max_weight > 1.0:
         raise ValueError(f"max_weight must be <= 1.0, got {max_weight}")
     
+    # Validate max_weight is feasible for the number of assets
+    n_assets = len(returns_wide.columns)
+    min_feasible_weight = 1.0 / n_assets
+    
+    if max_weight < min_feasible_weight:
+        raise ValueError(
+            f"max_weight ({max_weight:.4f}) is too small for {n_assets} assets. "
+            f"Must be >= {min_feasible_weight:.4f} (1/{n_assets}) to ensure weights sum to 1. "
+            f"With max_weight < 1/n_assets, all assets would be capped and the portfolio "
+            f"would be underinvested."
+        )
+    
     # Compute rolling volatility (standard deviation)
     rolling_vol = returns_wide.rolling(window=lookback, min_periods=lookback).std()
     
