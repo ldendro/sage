@@ -173,6 +173,59 @@ class TestComputeInverseVolWeights:
         weights = compute_inverse_vol_weights(returns_wide, max_weight=0.34)
         assert weights is not None
     
+    def test_inverse_vol_invalid_min_vol(self):
+        """Test that invalid min_vol raises ValueError."""
+        data = load_universe(
+            universe=["SPY", "QQQ"],
+            start_date="2020-01-01",
+            end_date="2020-01-31",
+        )
+        strategy_output = run_passthrough_v1(data)
+        returns_wide = align_asset_returns(strategy_output)
+        
+        # min_vol = 0 would cause division by zero
+        with pytest.raises(ValueError, match="min_vol must be > 0"):
+            compute_inverse_vol_weights(returns_wide, min_vol=0)
+        
+        # Negative min_vol should also fail
+        with pytest.raises(ValueError, match="min_vol must be > 0"):
+            compute_inverse_vol_weights(returns_wide, min_vol=-0.001)
+    
+    def test_inverse_vol_handles_zero_volatility(self):
+        """Test that zero volatility assets are handled correctly."""
+        # Create synthetic data with one zero-vol asset
+        dates = pd.date_range("2020-01-01", periods=50, freq="B")
+        
+        # Normal vol asset
+        normal_returns = np.random.normal(0, 0.01, size=50)
+        
+        # Zero vol asset (constant returns)
+        zero_vol_returns = np.zeros(50)
+        
+        returns_wide = pd.DataFrame({
+            "NORMAL": normal_returns,
+            "ZERO_VOL": zero_vol_returns,
+        }, index=dates)
+        
+        # Should work with min_vol floor
+        weights = compute_inverse_vol_weights(
+            returns_wide,
+            lookback=20,
+            min_vol=0.0001,
+        )
+        
+        # After warmup, weights should be valid (no NaN/inf)
+        weights_after_warmup = weights.iloc[20:]
+        assert not weights_after_warmup.isna().any().any()
+        assert not np.isinf(weights_after_warmup).any().any()
+        
+        # Weights should sum to 1
+        assert np.allclose(weights_after_warmup.sum(axis=1), 1.0)
+        
+        # Zero vol asset should get higher weight (due to min_vol floor)
+        avg_weights = weights_after_warmup.mean()
+        assert avg_weights["ZERO_VOL"] > avg_weights["NORMAL"]
+    
     def test_inverse_vol_single_asset(self):
         """Test inverse vol with single asset."""
         data = load_universe(

@@ -56,6 +56,12 @@ def compute_inverse_vol_weights(
     if max_weight > 1.0:
         raise ValueError(f"max_weight must be <= 1.0, got {max_weight}")
     
+    if min_vol <= 0:
+        raise ValueError(
+            f"min_vol must be > 0 to prevent division by zero, got {min_vol}. "
+            f"Zero or negative min_vol would cause inf/NaN weights for zero-volatility assets."
+        )
+    
     # Validate max_weight is feasible for the number of assets
     n_assets = len(returns_wide.columns)
     min_feasible_weight = 1.0 / n_assets
