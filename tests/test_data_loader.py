@@ -184,6 +184,58 @@ class TestLoadUniverse:
             expected_ret = df['close'].iloc[i] / df['close'].iloc[i-1] - 1.0
             actual_ret = df['raw_ret'].iloc[i]
             assert abs(actual_ret - expected_ret) < 1e-6
+    
+    def test_load_universe_handles_string_dates(self, tmp_path):
+        """Test that string-formatted dates in parquet are handled correctly."""
+        # Create a test parquet file with string dates
+        # (simulates CSV -> parquet conversion)
+        test_symbol = "TEST"
+        dates_str = pd.date_range("2020-01-01", periods=10, freq="B").strftime("%Y-%m-%d")
+        
+        df_with_string_dates = pd.DataFrame({
+            'date': dates_str,  # String dates, not datetime
+            'open': 100.0,
+            'high': 101.0,
+            'low': 99.0,
+            'close': 100.5,
+            'volume': 1000000,
+            'raw_ret': 0.005,
+        })
+        
+        # Save to temp location
+        test_file = tmp_path / f"{test_symbol}.parquet"
+        df_with_string_dates.to_parquet(test_file, index=False)
+        
+        # Temporarily override paths to use temp directory
+        import sage_core.utils.paths as paths_module
+        original_get_path = paths_module.get_processed_data_path
+        
+        def mock_get_path(symbol):
+            if symbol == test_symbol:
+                return test_file
+            return original_get_path(symbol)
+        
+        paths_module.get_processed_data_path = mock_get_path
+        
+        try:
+            # Should successfully load and convert string dates
+            data = load_universe(
+                universe=[test_symbol],
+                start_date="2020-01-01",
+                end_date="2020-01-10",
+            )
+            
+            df = data[test_symbol]
+            
+            # Index should be DatetimeIndex, not object
+            assert isinstance(df.index, pd.DatetimeIndex)
+            
+            # Should have filtered correctly
+            assert len(df) > 0
+            
+        finally:
+            # Restore original function
+            paths_module.get_processed_data_path = original_get_path
 
 
 class TestGetAvailableSymbols:

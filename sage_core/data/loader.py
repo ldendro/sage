@@ -111,11 +111,19 @@ def load_universe(
         # Ensure index is DatetimeIndex
         if not isinstance(df.index, pd.DatetimeIndex):
             if 'date' in df.columns:
+                # Coerce to datetime in case it's stored as string
+                # (common when parquet written from CSV or legacy pipelines)
+                df['date'] = pd.to_datetime(df['date'])
                 df = df.set_index('date')
             else:
                 raise ValueError(
                     f"Data for {symbol} must have DatetimeIndex or 'date' column"
                 )
+        
+        # Ensure index is datetime even if it was already the index
+        # (handles case where index is object dtype)
+        if df.index.dtype == 'object':
+            df.index = pd.to_datetime(df.index)
         
         # Filter to date range
         df_filtered = df.loc[start_ts:end_ts]
