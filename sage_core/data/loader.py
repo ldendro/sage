@@ -190,7 +190,7 @@ def get_data_date_range(symbol: str) -> tuple[pd.Timestamp, pd.Timestamp]:
         symbol: Ticker symbol
     
     Returns:
-        Tuple of (start_date, end_date)
+        Tuple of (start_date, end_date) as pd.Timestamp
     
     Raises:
         FileNotFoundError: If data file not found for symbol
@@ -203,4 +203,22 @@ def get_data_date_range(symbol: str) -> tuple[pd.Timestamp, pd.Timestamp]:
         )
     
     df = pd.read_parquet(file_path)
+    
+    # Apply same normalization as load_universe to handle string dates
+    # and files saved with index=False (RangeIndex)
+    if not isinstance(df.index, pd.DatetimeIndex):
+        if 'date' in df.columns:
+            # Coerce to datetime in case it's stored as string
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date')
+        else:
+            raise ValueError(
+                f"Data for {symbol} must have DatetimeIndex or 'date' column"
+            )
+    
+    # Ensure index is datetime even if it was already the index
+    # (handles case where index is object dtype)
+    if df.index.dtype == 'object':
+        df.index = pd.to_datetime(df.index)
+    
     return df.index.min(), df.index.max()

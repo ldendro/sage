@@ -275,3 +275,50 @@ class TestGetDataDateRange:
         """Test that missing symbol raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError, match="Data file not found"):
             get_data_date_range("NONEXISTENT_SYMBOL")
+    
+    def test_get_data_date_range_with_string_dates(self, tmp_path):
+        """Test that get_data_date_range handles string dates and RangeIndex."""
+        # Create a test parquet file with string dates and RangeIndex
+        # (simulates CSV -> parquet with index=False)
+        test_symbol = "TEST_RANGE"
+        dates_str = pd.date_range("2020-01-01", periods=100, freq="B").strftime("%Y-%m-%d")
+        
+        df_with_range_index = pd.DataFrame({
+            'date': dates_str,  # String dates
+            'close': 100.0,
+        })
+        
+        # Save with index=False to create RangeIndex
+        test_file = tmp_path / f"{test_symbol}.parquet"
+        df_with_range_index.to_parquet(test_file, index=False)
+        
+        # Verify the file has RangeIndex (not DatetimeIndex)
+        df_check = pd.read_parquet(test_file)
+        assert isinstance(df_check.index, pd.RangeIndex)
+        
+        # Temporarily override paths
+        import sage_core.utils.paths as paths_module
+        original_get_path = paths_module.get_processed_data_path
+        
+        def mock_get_path(symbol):
+            if symbol == test_symbol:
+                return test_file
+            return original_get_path(symbol)
+        
+        paths_module.get_processed_data_path = mock_get_path
+        
+        try:
+            # Should return Timestamps, not integers
+            start, end = get_data_date_range(test_symbol)
+            
+            # Must be Timestamps
+            assert isinstance(start, pd.Timestamp)
+            assert isinstance(end, pd.Timestamp)
+            
+            # Should match expected range
+            assert start.year == 2020
+            assert start.month == 1
+            assert end.year == 2020
+            
+        finally:
+            paths_module.get_processed_data_path = original_get_path
