@@ -45,10 +45,12 @@ def apply_vol_targeting(
         ... )
     
     Notes:
-        - First (lookback-1) days will have leverage = 1.0 (no scaling)
+        - First lookback days will have leverage = 1.0 (warmup + shift)
         - Leverage = target_vol / realized_vol
         - Leverage is capped between min_leverage and max_leverage
         - Uses annualization factor of sqrt(252) for daily returns
+        - **Look-ahead bias prevention**: Volatility is shifted by 1 day,
+          so weights at date t only depend on returns through t-1
     """
     # Validate inputs
     if target_vol <= 0:
@@ -73,14 +75,20 @@ def apply_vol_targeting(
         raise ValueError("portfolio_returns and weights_df must have the same index")
     
     # Calculate rolling volatility (annualized)
+    # IMPORTANT: Shift by 1 to avoid look-ahead bias
+    # Weights at date t should only use information available through t-1
     rolling_vol = portfolio_returns.rolling(
         window=lookback,
         min_periods=lookback
     ).std() * np.sqrt(252)
     
+    # Shift volatility by 1 day to avoid look-ahead bias
+    # This ensures weights at date t only depend on returns through t-1
+    rolling_vol = rolling_vol.shift(1)
+    
     # Calculate leverage multiplier
     # leverage = target_vol / realized_vol
-    # For first (lookback-1) days, use leverage = 1.0 (no scaling)
+    # For first lookback days, use leverage = 1.0 (no scaling)
     leverage = pd.Series(1.0, index=portfolio_returns.index)
     
     # Only apply vol targeting after warmup period

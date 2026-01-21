@@ -47,8 +47,8 @@ class TestApplyVolTargeting:
         # Check index matches
         assert scaled.index.equals(weights.index)
         
-        # First 19 days should have leverage = 1.0 (warmup)
-        assert np.allclose(scaled.iloc[:19], weights.iloc[:19])
+        # First lookback days should have leverage = 1.0 (warmup + shift)
+        assert np.allclose(scaled.iloc[:20], weights.iloc[:20])
     
     def test_vol_targeting_scales_weights(self):
         """Test that vol targeting scales weights correctly."""
@@ -197,9 +197,40 @@ class TestApplyVolTargeting:
             lookback=lookback,
         )
         
-        # First (lookback-1) days should have leverage = 1.0
-        warmup_leverage = (scaled.iloc[:lookback-1] / weights.iloc[:lookback-1])
+        # First lookback days should have leverage = 1.0 (warmup + shift)
+        warmup_leverage = (scaled.iloc[:lookback] / weights.iloc[:lookback])
         assert np.allclose(warmup_leverage, 1.0)
+    
+    def test_vol_targeting_no_lookahead_bias(self):
+        """Test that volatility calculation doesn't use future information."""
+        np.random.seed(42)
+        dates = pd.date_range("2020-01-01", periods=100, freq="B")
+        
+        # Create returns with a known spike on day 50
+        returns = pd.Series(np.random.normal(0, 0.01, size=100), index=dates)
+        returns.iloc[50] = 0.10  # Large spike
+        
+        weights = pd.DataFrame({
+            "A": 0.5,
+            "B": 0.5,
+        }, index=dates)
+        
+        lookback = 20
+        scaled = apply_vol_targeting(
+            returns,
+            weights,
+            target_vol=0.10,
+            lookback=lookback,
+        )
+        
+        # The leverage on day 50 should NOT be affected by day 50's return
+        # It should only use returns through day 49
+        # So the spike on day 50 should affect leverage starting on day 51
+        leverage_day_50 = (scaled.iloc[50] / weights.iloc[50]).mean()
+        leverage_day_51 = (scaled.iloc[51] / weights.iloc[51]).mean()
+        
+        # Day 51's leverage should be lower than day 50's (due to spike increasing vol)
+        assert leverage_day_51 < leverage_day_50
 
 
 class TestCalculatePortfolioVolatility:
@@ -221,11 +252,11 @@ class TestCalculatePortfolioVolatility:
         # Check shape
         assert len(vol) == len(returns)
         
-        # First 19 should be NaN
+        # First (lookback-1) should be NaN
         assert vol.iloc[:19].isna().all()
         
         # After warmup should have values
-        assert not vol.iloc[20:].isna().any()
+        assert not vol.iloc[19:].isna().any()
     
     def test_calculate_vol_annualized(self):
         """Test annualized vs non-annualized volatility."""
