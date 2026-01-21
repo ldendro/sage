@@ -137,22 +137,33 @@ def run_system_walkforward(
         weights_wide=vol_targeted_weights,
     )
     
-    # Step 9: Build equity curve
-    equity_curve = (1 + final_portfolio_returns).cumprod() * 100
+    # Drop NaN rows from warmup period
+    # The inverse vol allocator has a warmup period of vol_window days
+    # During this period, weights are NaN, causing NaN returns
+    # We drop these to ensure valid equity curve and metrics
+    final_portfolio_returns_clean = final_portfolio_returns.dropna()
+    
+    # Use the same index for all outputs to ensure alignment
+    clean_index = final_portfolio_returns_clean.index
+    vol_targeted_weights_clean = vol_targeted_weights.loc[clean_index]
+    asset_returns_clean = asset_returns.loc[clean_index]
+    
+    # Step 9: Build equity curve (starting at 100)
+    equity_curve = (1 + final_portfolio_returns_clean).cumprod() * 100
     
     # Step 10: Calculate metrics
     metrics = calculate_all_metrics(
-        returns=final_portfolio_returns,
+        returns=final_portfolio_returns_clean,
         equity_curve=equity_curve,
-        weights_df=vol_targeted_weights,
-        returns_df=asset_returns,
+        weights_df=vol_targeted_weights_clean,
+        returns_df=asset_returns_clean,
     )
     
     return {
-        "returns": final_portfolio_returns,
+        "returns": final_portfolio_returns_clean,
         "equity_curve": equity_curve,
-        "weights": vol_targeted_weights,
-        "raw_weights": capped_weights,
+        "weights": vol_targeted_weights_clean,
+        "raw_weights": capped_weights.loc[clean_index],
         "metrics": metrics,
-        "asset_returns": asset_returns,
+        "asset_returns": asset_returns_clean,
     }

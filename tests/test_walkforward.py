@@ -157,14 +157,14 @@ class TestRunSystemWalkforward:
         assert result_large["weights"].shape[1] > result_small["weights"].shape[1]
     
     def test_walkforward_date_alignment(self):
-        """Test that all outputs have aligned dates."""
+        """Test that all outputs have aligned dates (after warmup period)."""
         result = run_system_walkforward(
             universe=["SPY", "QQQ", "IWM"],
             start_date="2020-01-01",
             end_date="2020-06-30",
         )
         
-        # All series/dataframes should have the same index
+        # All series/dataframes should have the same index (after warmup)
         returns_index = result["returns"].index
         equity_index = result["equity_curve"].index
         weights_index = result["weights"].index
