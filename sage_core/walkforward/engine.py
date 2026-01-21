@@ -137,16 +137,21 @@ def run_system_walkforward(
         weights_wide=vol_targeted_weights,
     )
     
-    # Drop NaN rows from warmup period
-    # The inverse vol allocator has a warmup period of vol_window days
-    # During this period, weights are NaN, causing NaN returns
-    # We drop these to ensure valid equity curve and metrics
-    final_portfolio_returns_clean = final_portfolio_returns.dropna()
+    # Drop warmup period rows
+    # IMPORTANT: We filter on weights, not returns!
+    # build_portfolio_raw_returns uses sum(skipna=True), so NaN weights → 0.0 returns
+    # If we filtered on returns.dropna(), warmup period wouldn't be dropped
+    # This would bias volatility, Sharpe, turnover, and equity curve length
     
-    # Use the same index for all outputs to ensure alignment
-    clean_index = final_portfolio_returns_clean.index
+    # Drop rows where any weight is NaN (warmup period)
+    valid_weight_mask = ~vol_targeted_weights.isna().any(axis=1)
+    clean_index = vol_targeted_weights.index[valid_weight_mask]
+    
+    # Apply to all outputs to ensure alignment
+    final_portfolio_returns_clean = final_portfolio_returns.loc[clean_index]
     vol_targeted_weights_clean = vol_targeted_weights.loc[clean_index]
     asset_returns_clean = asset_returns.loc[clean_index]
+    capped_weights_clean = capped_weights.loc[clean_index]
     
     # Step 9: Build equity curve (starting at 100)
     equity_curve = (1 + final_portfolio_returns_clean).cumprod() * 100
@@ -163,7 +168,7 @@ def run_system_walkforward(
         "returns": final_portfolio_returns_clean,
         "equity_curve": equity_curve,
         "weights": vol_targeted_weights_clean,
-        "raw_weights": capped_weights.loc[clean_index],
+        "raw_weights": capped_weights_clean,
         "metrics": metrics,
         "asset_returns": asset_returns_clean,
     }
