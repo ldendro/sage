@@ -35,12 +35,21 @@ def calculate_sharpe_ratio(
     if len(returns) == 0:
         return 0.0
     
-    excess_returns = returns - (risk_free_rate / annualization_factor)
+    # Drop NaNs to handle sparse data
+    returns_clean = returns.dropna()
     
-    if excess_returns.std() == 0:
+    if len(returns_clean) == 0:
         return 0.0
     
-    sharpe = excess_returns.mean() / excess_returns.std() * np.sqrt(annualization_factor)
+    excess_returns = returns_clean - (risk_free_rate / annualization_factor)
+    
+    std = excess_returns.std()
+    
+    # Check for zero or NaN std (can happen with single value or all same)
+    if std == 0 or np.isnan(std):
+        return 0.0
+    
+    sharpe = excess_returns.mean() / std * np.sqrt(annualization_factor)
     return float(sharpe)
 
 

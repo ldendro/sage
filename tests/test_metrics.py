@@ -54,6 +54,35 @@ class TestCalculateSharpeRatio:
         
         # With positive risk-free rate, Sharpe should be lower
         assert sharpe_with_rf < sharpe_no_rf
+    
+    def test_sharpe_with_nans(self):
+        """Test Sharpe with NaN values in returns."""
+        returns = pd.Series([0.001, np.nan, 0.002, np.nan, 0.001])
+        
+        # Should drop NaNs and calculate on valid values
+        sharpe = calculate_sharpe_ratio(returns)
+        
+        # Should be a valid number, not NaN
+        assert not np.isnan(sharpe)
+        assert isinstance(sharpe, float)
+    
+    def test_sharpe_all_nans(self):
+        """Test Sharpe with all NaN returns."""
+        returns = pd.Series([np.nan, np.nan, np.nan])
+        
+        sharpe = calculate_sharpe_ratio(returns)
+        
+        # Should return 0, not NaN
+        assert sharpe == 0.0
+    
+    def test_sharpe_single_value(self):
+        """Test Sharpe with single non-NaN value."""
+        returns = pd.Series([0.001])
+        
+        sharpe = calculate_sharpe_ratio(returns)
+        
+        # Single value has std = 0, should return 0
+        assert sharpe == 0.0
 
 
 class TestCalculateMaxDrawdown:
