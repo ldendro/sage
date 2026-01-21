@@ -89,7 +89,17 @@ def calculate_max_drawdown(equity_curve: pd.Series) -> Dict[str, Any]:
     max_dd_pct = drawdown_pct[max_dd_idx]
     
     # Find peak before max drawdown
-    peak_idx = running_max[:max_dd_idx].idxmax()
+    # Use the LAST occurrence of the peak value before the trough
+    # This gives accurate drawdown duration when there are repeated peaks
+    peak_value = running_max[max_dd_idx]
+    pre_trough = equity_curve[:max_dd_idx]
+    # Find all dates where equity equals the peak value
+    at_peak = pre_trough[pre_trough == peak_value]
+    if len(at_peak) > 0:
+        peak_idx = at_peak.index[-1]  # Last occurrence
+    else:
+        # Fallback (shouldn't happen, but handle edge case)
+        peak_idx = running_max[:max_dd_idx].idxmax()
     
     # Find recovery date (if any)
     recovery_idx = None

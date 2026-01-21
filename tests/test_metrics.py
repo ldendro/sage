@@ -116,6 +116,30 @@ class TestCalculateMaxDrawdown:
         
         # Max DD should be 0 (no drawdown)
         assert dd_info["max_drawdown"] == 0.0
+    
+    def test_max_drawdown_repeated_peaks(self):
+        """Test that last peak is selected when there are multiple peaks."""
+        dates = pd.date_range("2020-01-01", periods=10, freq="D")
+        
+        # Equity reaches 110 twice before dropping to 90
+        # Should use the LAST peak at index 5, not the first at index 1
+        equity = pd.Series([100, 110, 105, 100, 105, 110, 105, 100, 95, 90], index=dates)
+        
+        dd_info = calculate_max_drawdown(equity)
+        
+        # Max DD should be from 110 to 90 = -20
+        assert dd_info["max_drawdown"] == -20
+        assert np.isclose(dd_info["max_drawdown_pct"], -20/110)
+        
+        # Peak should be at index 5 (last occurrence of 110), not index 1
+        assert dd_info["peak_date"] == dates[5]
+        
+        # Trough should be at index 9 (90)
+        assert dd_info["trough_date"] == dates[9]
+        
+        # Drawdown duration should be 4 days (from index 5 to 9)
+        # Not 8 days (from index 1 to 9)
+        assert dd_info["drawdown_duration_days"] == 4
 
 
 class TestCalculateTurnover:
