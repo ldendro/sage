@@ -90,17 +90,19 @@ class TestRunSystemWalkforward:
         
         # Vol targeted weights should differ from raw weights
         # (after warmup period)
-        weights = result["weights"]
+        # NOTE: We compare vol_targeted_weights (pre-cap) with raw_weights
+        # because final weights may be capped back down if leverage exceeded limits
+        vol_targeted_weights = result["vol_targeted_weights"]
         raw_weights = result["raw_weights"]
         
         # After warmup, some scaling should have occurred
         # Check that they're not identical
-        if len(weights) > 30:
-            post_warmup_weights = weights.iloc[30:]
+        if len(vol_targeted_weights) > 30:
+            post_warmup_vol_targeted = vol_targeted_weights.iloc[30:]
             post_warmup_raw = raw_weights.iloc[30:]
             
             # Should have some difference (not identical)
-            assert not post_warmup_weights.equals(post_warmup_raw)
+            assert not post_warmup_vol_targeted.equals(post_warmup_raw)
     
     def test_walkforward_metrics(self):
         """Test that metrics are calculated correctly."""

@@ -70,8 +70,9 @@ def run_system_walkforward(
         Dictionary with:
             - returns: Portfolio returns series
             - equity_curve: Cumulative equity series
-            - weights: Final weights DataFrame
-            - raw_weights: Pre-vol-targeting weights
+            - weights: Final weights DataFrame (post-leverage caps applied)
+            - vol_targeted_weights: Pre-cap weights after vol targeting (for analysis)
+            - raw_weights: Pre-vol-targeting weights (post-risk-caps, pre-leverage)
             - metrics: Performance metrics dictionary
             - asset_returns: Asset returns DataFrame
     
@@ -141,10 +142,26 @@ def run_system_walkforward(
         max_leverage=max_leverage,
     )
     
-    # Step 8: Build final portfolio returns
+    # Step 7b: Reapply risk caps after vol targeting
+    # CRITICAL: Vol targeting scales weights by leverage (can be >1.0)
+    # This means a 0.25 cap becomes 0.50 at 2× leverage, violating limits
+    # We reapply caps to ensure absolute exposure limits are always respected
+    # TODO (Phase 2+): Make this configurable via cap_enforcement_mode parameter
+    #   - "post_leverage": Current behavior (caps apply to final portfolio)
+    #   - "pre_leverage": Caps apply before leverage (current violation)
+    #   - "leverage_aware": Constrain leverage to respect caps
+    final_weights = apply_all_risk_caps(
+        weights_df=vol_targeted_weights,
+        sector_map=SECTOR_MAP,
+        max_weight_per_asset=max_weight_per_asset,
+        max_sector_weight=max_sector_weight,
+        min_assets_held=min_assets_held,
+    )
+    
+    # Step 8: Build final portfolio returns (with post-leverage caps applied)
     final_portfolio_returns = build_portfolio_raw_returns(
         returns_wide=asset_returns,
-        weights_wide=vol_targeted_weights,
+        weights_wide=final_weights,
     )
     
     # Drop warmup period rows
@@ -154,12 +171,13 @@ def run_system_walkforward(
     # This would bias volatility, Sharpe, turnover, and equity curve length
     
     # Drop rows where any weight is NaN (warmup period)
-    valid_weight_mask = ~vol_targeted_weights.isna().any(axis=1)
-    clean_index = vol_targeted_weights.index[valid_weight_mask]
+    valid_weight_mask = ~final_weights.isna().any(axis=1)
+    clean_index = final_weights.index[valid_weight_mask]
     
     # Apply to all outputs to ensure alignment
     final_portfolio_returns_clean = final_portfolio_returns.loc[clean_index]
-    vol_targeted_weights_clean = vol_targeted_weights.loc[clean_index]
+    final_weights_clean = final_weights.loc[clean_index]
+    vol_targeted_weights_clean = vol_targeted_weights.loc[clean_index]  # Pre-cap weights
     asset_returns_clean = asset_returns.loc[clean_index]
     capped_weights_clean = capped_weights.loc[clean_index]
     
@@ -170,15 +188,16 @@ def run_system_walkforward(
     metrics = calculate_all_metrics(
         returns=final_portfolio_returns_clean,
         equity_curve=equity_curve,
-        weights_df=vol_targeted_weights_clean,
+        weights_df=final_weights_clean,
         returns_df=asset_returns_clean,
     )
     
     return {
         "returns": final_portfolio_returns_clean,
         "equity_curve": equity_curve,
-        "weights": vol_targeted_weights_clean,
-        "raw_weights": capped_weights_clean,
+        "weights": final_weights_clean,  # Final weights (post-leverage caps)
+        "vol_targeted_weights": vol_targeted_weights_clean,  # Pre-cap weights (for analysis)
+        "raw_weights": capped_weights_clean,  # Pre-vol-targeting weights
         "metrics": metrics,
         "asset_returns": asset_returns_clean,
     }
