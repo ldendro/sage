@@ -1,1 +1,1 @@
-"""Walkforward backtesting engine and scheduling."""
+"""Walkforward backtesting engine."""
