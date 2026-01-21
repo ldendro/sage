@@ -185,18 +185,19 @@ class TestCalculateTurnover:
         # Weekly weights (rebalance every 5 days)
         weight_dates = pd.date_range("2020-01-01", periods=3, freq="5D")
         weights = pd.DataFrame({
-            "A": [0.5, 0.6, 0.5],
-            "B": [0.5, 0.4, 0.5],
+            "A": [0.5, 0.5, 0.5],  # Keep constant to isolate drift effect
+            "B": [0.5, 0.5, 0.5],
         }, index=weight_dates)
         
-        # Daily returns
+        # Daily returns - create known returns to test compounding
         return_dates = pd.date_range("2020-01-01", periods=11, freq="D")
+        # Asset A gains 1% per day, B loses 1% per day
         returns = pd.DataFrame({
-            "A": np.random.normal(0.001, 0.01, 11),
-            "B": np.random.normal(0.001, 0.01, 11),
+            "A": [0.01] * 11,
+            "B": [-0.01] * 11,
         }, index=return_dates)
         
-        # Should work without error
+        # Calculate turnover
         turnover = calculate_turnover(weights, returns)
         
         # Should have same length as weights
@@ -205,9 +206,17 @@ class TestCalculateTurnover:
         # First day should be 0
         assert turnover.iloc[0] == 0.0
         
-        # Subsequent days should have turnover
+        # Second rebalance (after 5 days of returns):
+        # A: 0.5 * (1.01^5) = 0.5 * 1.051 ≈ 0.5255
+        # B: 0.5 * (0.99^5) = 0.5 * 0.951 ≈ 0.4755
+        # After renorm: A ≈ 0.525, B ≈ 0.475
+        # To rebalance to 0.5/0.5, need turnover ≈ 0.025
+        # Turnover should be > 0 due to drift
         assert turnover.iloc[1] > 0
-        assert turnover.iloc[2] > 0
+        
+        # Should be approximately 0.025 (half of the weight shift)
+        # (0.525 - 0.5) + (0.5 - 0.475) = 0.05, turnover = 0.05/2 = 0.025
+        assert 0.02 < turnover.iloc[1] < 0.03
 
 
 class TestCalculateYearlySummary:

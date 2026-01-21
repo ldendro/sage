@@ -144,6 +144,7 @@ def calculate_turnover(
         - w_t-1_drifted accounts for price changes between t-1 and t
         - First day has turnover = 0
         - Uses date-based alignment to handle different rebalance frequencies
+        - Compounds returns over the interval for non-daily rebalances
     """
     if len(weights_df) == 0:
         return pd.Series(dtype=float)
@@ -153,12 +154,6 @@ def calculate_turnover(
     
     if len(weights_df) == 1:
         return turnover
-    
-    # Align returns to weights index if provided
-    if returns_df is not None:
-        # Reindex returns to match weights dates
-        # Forward fill to get returns between rebalance dates
-        returns_aligned = returns_df.reindex(weights_df.index, method='ffill')
     
     # Calculate weight changes using date-based indexing
     for i in range(1, len(weights_df)):
@@ -170,10 +165,23 @@ def calculate_turnover(
         
         # Adjust previous weights for returns (drift)
         if returns_df is not None:
-            # Use returns at current date (return from prev_date to curr_date)
-            curr_returns = returns_aligned.loc[curr_date]
-            # Drifted weights = prev_weights * (1 + returns)
-            drifted_weights = prev_weights * (1 + curr_returns)
+            # Get returns between prev_date and curr_date (exclusive of prev_date, inclusive of curr_date)
+            # This handles multi-period intervals correctly
+            interval_returns = returns_df.loc[prev_date:curr_date]
+            
+            # Skip the first row (prev_date) to avoid double-counting
+            if len(interval_returns) > 1:
+                interval_returns = interval_returns.iloc[1:]
+            
+            # Compound returns over the interval: (1+r1)*(1+r2)*...*(1+rn) - 1
+            if len(interval_returns) > 0:
+                compounded_returns = (1 + interval_returns).prod() - 1
+            else:
+                # No returns in interval, assume zero return
+                compounded_returns = pd.Series(0.0, index=prev_weights.index)
+            
+            # Drifted weights = prev_weights * (1 + compounded_returns)
+            drifted_weights = prev_weights * (1 + compounded_returns)
             # Renormalize
             if drifted_weights.sum() > 0:
                 drifted_weights = drifted_weights / drifted_weights.sum()
