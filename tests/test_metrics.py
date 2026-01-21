@@ -275,6 +275,39 @@ class TestCalculateTurnover:
         # Turnover ≈ 0.025
         assert turnover.iloc[1] > 0
         assert 0.02 < turnover.iloc[1] < 0.03
+    
+    def test_turnover_extra_columns_and_nans(self):
+        """Test turnover with extra columns in returns and NaNs."""
+        dates = pd.date_range("2020-01-01", periods=3, freq="D")
+        
+        # Weights only for A and B
+        weights = pd.DataFrame({
+            "A": [0.5, 0.6, 0.5],
+            "B": [0.5, 0.4, 0.5],
+        }, index=dates)
+        
+        # Returns have extra column C and some NaNs
+        returns = pd.DataFrame({
+            "A": [0.01, 0.01, np.nan],  # NaN on day 3
+            "B": [0.01, 0.01, 0.01],
+            "C": [0.02, 0.02, 0.02],  # Extra column not in weights
+        }, index=dates)
+        
+        # Should work without error and not produce NaN turnover
+        turnover = calculate_turnover(weights, returns)
+        
+        # Should have same length as weights
+        assert len(turnover) == len(weights)
+        
+        # No NaN values in turnover
+        assert not turnover.isna().any()
+        
+        # First day should be 0
+        assert turnover.iloc[0] == 0.0
+        
+        # Subsequent days should have valid turnover
+        assert turnover.iloc[1] > 0
+        assert turnover.iloc[2] > 0
 
 
 class TestCalculateYearlySummary:

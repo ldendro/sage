@@ -188,6 +188,12 @@ def calculate_turnover(
                 # No returns in interval, assume zero return
                 compounded_returns = pd.Series(0.0, index=prev_weights.index)
             
+            # Align compounded returns to weight index to handle:
+            # 1. Extra columns in returns (superset of traded assets)
+            # 2. NaNs for some assets over the interval
+            # Reindex to weight columns and fill missing with 0 (no return)
+            compounded_returns = compounded_returns.reindex(prev_weights.index, fill_value=0.0)
+            
             # Drifted weights = prev_weights * (1 + compounded_returns)
             drifted_weights = prev_weights * (1 + compounded_returns)
             # Renormalize
