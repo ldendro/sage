@@ -121,9 +121,19 @@ def run_system_walkforward(
         weights_wide=capped_weights,
     )
     
-    # Step 7: Apply volatility targeting
+    # CRITICAL: Mask returns where weights are NaN (warmup period)
+    # build_portfolio_raw_returns uses sum(skipna=True), so NaN weights → 0.0 returns
+    # If we pass these 0.0 returns to vol_targeting, the rolling vol window will
+    # include artificial zeros, understate realized volatility, and drive leverage
+    # to max cap regardless of true risk (biasing early results)
+    # Solution: Set returns to NaN where any weight is NaN
+    weight_is_nan_mask = capped_weights.isna().any(axis=1)
+    raw_portfolio_returns_masked = raw_portfolio_returns.copy()
+    raw_portfolio_returns_masked[weight_is_nan_mask] = np.nan
+    
+    # Step 7: Apply volatility targeting (with masked returns)
     vol_targeted_weights = apply_vol_targeting(
-        portfolio_returns=raw_portfolio_returns,
+        portfolio_returns=raw_portfolio_returns_masked,
         weights_df=capped_weights,
         target_vol=target_vol,
         lookback=vol_lookback,
