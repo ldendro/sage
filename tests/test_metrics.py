@@ -179,6 +179,35 @@ class TestCalculateTurnover:
         
         assert len(turnover) == 1
         assert turnover.iloc[0] == 0.0
+    
+    def test_turnover_different_frequencies(self):
+        """Test turnover with weekly weights and daily returns."""
+        # Weekly weights (rebalance every 5 days)
+        weight_dates = pd.date_range("2020-01-01", periods=3, freq="5D")
+        weights = pd.DataFrame({
+            "A": [0.5, 0.6, 0.5],
+            "B": [0.5, 0.4, 0.5],
+        }, index=weight_dates)
+        
+        # Daily returns
+        return_dates = pd.date_range("2020-01-01", periods=11, freq="D")
+        returns = pd.DataFrame({
+            "A": np.random.normal(0.001, 0.01, 11),
+            "B": np.random.normal(0.001, 0.01, 11),
+        }, index=return_dates)
+        
+        # Should work without error
+        turnover = calculate_turnover(weights, returns)
+        
+        # Should have same length as weights
+        assert len(turnover) == len(weights)
+        
+        # First day should be 0
+        assert turnover.iloc[0] == 0.0
+        
+        # Subsequent days should have turnover
+        assert turnover.iloc[1] > 0
+        assert turnover.iloc[2] > 0
 
 
 class TestCalculateYearlySummary:

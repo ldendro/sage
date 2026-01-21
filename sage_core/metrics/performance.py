@@ -143,6 +143,7 @@ def calculate_turnover(
         - Turnover on day t = sum(|w_t - w_t-1_drifted|) / 2
         - w_t-1_drifted accounts for price changes between t-1 and t
         - First day has turnover = 0
+        - Uses date-based alignment to handle different rebalance frequencies
     """
     if len(weights_df) == 0:
         return pd.Series(dtype=float)
@@ -153,14 +154,24 @@ def calculate_turnover(
     if len(weights_df) == 1:
         return turnover
     
-    # Calculate weight changes
+    # Align returns to weights index if provided
+    if returns_df is not None:
+        # Reindex returns to match weights dates
+        # Forward fill to get returns between rebalance dates
+        returns_aligned = returns_df.reindex(weights_df.index, method='ffill')
+    
+    # Calculate weight changes using date-based indexing
     for i in range(1, len(weights_df)):
-        prev_weights = weights_df.iloc[i-1]
-        curr_weights = weights_df.iloc[i]
+        prev_date = weights_df.index[i-1]
+        curr_date = weights_df.index[i]
+        
+        prev_weights = weights_df.loc[prev_date]
+        curr_weights = weights_df.loc[curr_date]
         
         # Adjust previous weights for returns (drift)
         if returns_df is not None:
-            curr_returns = returns_df.iloc[i]
+            # Use returns at current date (return from prev_date to curr_date)
+            curr_returns = returns_aligned.loc[curr_date]
             # Drifted weights = prev_weights * (1 + returns)
             drifted_weights = prev_weights * (1 + curr_returns)
             # Renormalize
@@ -171,7 +182,7 @@ def calculate_turnover(
         
         # Turnover = sum(|change|) / 2
         weight_change = (curr_weights - drifted_weights).abs().sum() / 2
-        turnover.iloc[i] = weight_change
+        turnover.loc[curr_date] = weight_change
     
     return turnover
 
