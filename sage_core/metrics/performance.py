@@ -165,13 +165,11 @@ def calculate_turnover(
         
         # Adjust previous weights for returns (drift)
         if returns_df is not None:
-            # Get returns between prev_date and curr_date (exclusive of prev_date, inclusive of curr_date)
-            # This handles multi-period intervals correctly
-            interval_returns = returns_df.loc[prev_date:curr_date]
-            
-            # Skip the first row (prev_date) to avoid double-counting
-            if len(interval_returns) > 1:
-                interval_returns = interval_returns.iloc[1:]
+            # Get returns between prev_date and curr_date
+            # Use explicit filtering to handle non-trading days correctly
+            # We want returns where: prev_date < date <= curr_date
+            mask = (returns_df.index > prev_date) & (returns_df.index <= curr_date)
+            interval_returns = returns_df.loc[mask]
             
             # Compound returns over the interval: (1+r1)*(1+r2)*...*(1+rn) - 1
             if len(interval_returns) > 0:

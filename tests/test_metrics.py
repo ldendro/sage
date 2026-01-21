@@ -217,6 +217,40 @@ class TestCalculateTurnover:
         # Should be approximately 0.025 (half of the weight shift)
         # (0.525 - 0.5) + (0.5 - 0.475) = 0.05, turnover = 0.05/2 = 0.025
         assert 0.02 < turnover.iloc[1] < 0.03
+    
+    def test_turnover_non_trading_day_rebalance(self):
+        """Test turnover when rebalance dates fall on non-trading days."""
+        # Rebalance on dates that include weekends (not in returns)
+        weight_dates = pd.to_datetime(["2020-01-03", "2020-01-12", "2020-01-19"])  # Fri, Sun, Sun
+        weights = pd.DataFrame({
+            "A": [0.5, 0.5, 0.5],
+            "B": [0.5, 0.5, 0.5],
+        }, index=weight_dates)
+        
+        # Daily returns only on business days
+        return_dates = pd.bdate_range("2020-01-03", "2020-01-20", freq="B")
+        # A gains 1% per day, B loses 1% per day
+        returns = pd.DataFrame({
+            "A": [0.01] * len(return_dates),
+            "B": [-0.01] * len(return_dates),
+        }, index=return_dates)
+        
+        # Calculate turnover
+        turnover = calculate_turnover(weights, returns)
+        
+        # Should work without error
+        assert len(turnover) == len(weights)
+        
+        # First rebalance should be 0
+        assert turnover.iloc[0] == 0.0
+        
+        # Second rebalance (Jan 12, Sunday - not in returns)
+        # Should use returns from Jan 3 (exclusive) to Jan 10 (last trading day before Jan 12)
+        # That's 5 business days: Jan 6-10
+        # A: 0.5 * 1.01^5 ≈ 0.5255, B: 0.5 * 0.99^5 ≈ 0.4755
+        # Turnover ≈ 0.025
+        assert turnover.iloc[1] > 0
+        assert 0.02 < turnover.iloc[1] < 0.03
 
 
 class TestCalculateYearlySummary:
