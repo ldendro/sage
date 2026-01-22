@@ -325,7 +325,7 @@ def main():
         
     except Exception as e:
         print(f"\n✗ Unexpected error: {e}", file=sys.stderr)
-        if args.verbose if 'args' in locals() else False:
+        if 'args' in locals() and hasattr(args, 'verbose') and args.verbose:
             import traceback
             traceback.print_exc()
         return 1
