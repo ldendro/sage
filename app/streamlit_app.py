@@ -73,17 +73,14 @@ start_date = col1.date_input(
 # Calculate dynamic end date defaults
 if start_date is not None:
     min_end_date = start_date + timedelta(days=1)
-    # Default end date is start date + 1 year
-    default_end_val = start_date + timedelta(days=366)
 else:
     min_end_date = date(2000, 1, 2)
-    default_end_val = DEFAULT_END_DATE
 
 end_date = col2.date_input(
     "End Date",
-    value=default_end_val,
+    value=DEFAULT_END_DATE,
     min_value=min_end_date,
-    help="Backtest end date - The last active portfolio day. Default value is 1 year after start date"
+    help="Backtest end date - The last active portfolio day. Default date is today's date"
 )
 
 # Validate date range using validators.py

@@ -86,7 +86,7 @@ def validate_backtest_params(universe, start_date, end_date, min_assets_held,
     errors.extend(validate_date_range(start_date, end_date))
     
     # Validate min assets vs universe size
-    if min_assets_held > len(universe):
+    if min_assets_held > len(universe) and len(universe) != 0:
         errors.append(
             f"Min assets ({min_assets_held}) cannot exceed universe size ({len(universe)})"
         )
