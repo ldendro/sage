@@ -19,7 +19,7 @@ def test_available_tickers():
 
 def test_default_universe():
     """Test default universe selection."""
-    assert len(DEFAULT_UNIVERSE) == 3
+    assert len(DEFAULT_UNIVERSE) == 12
     assert all(ticker in AVAILABLE_TICKERS for ticker in DEFAULT_UNIVERSE)
 
 
