@@ -293,7 +293,24 @@ def calculate_all_metrics(
         returns_df: Optional DataFrame of asset returns for turnover
     
     Returns:
-        Dictionary with all metrics
+        Dictionary with all metrics:
+            - sharpe_ratio: Annualized Sharpe ratio
+            - max_drawdown: Maximum drawdown (absolute)
+            - max_drawdown_pct: Maximum drawdown (percentage)
+            - peak_date: Date of peak before max drawdown
+            - trough_date: Date of max drawdown
+            - recovery_date: Date of recovery (None if not recovered)
+            - drawdown_duration_days: Days from peak to trough
+            - recovery_duration_days: Days from trough to recovery
+            - volatility: Annualized volatility
+            - total_return: Total cumulative return
+            - cagr: Compound annual growth rate
+            - calmar_ratio: CAGR / |Max Drawdown|
+            - trading_days: Number of trading days
+            - n_assets: Number of assets in portfolio
+            - avg_daily_turnover: Average daily turnover
+            - total_turnover: Total turnover over period
+            - yearly_summary: DataFrame of yearly metrics
     
     Example:
         >>> metrics = calculate_all_metrics(returns, equity, weights, asset_returns)
@@ -322,6 +339,22 @@ def calculate_all_metrics(
             metrics["cagr"] = 0.0
     else:
         metrics["cagr"] = 0.0
+    
+    # Calmar Ratio = CAGR / |Max Drawdown|
+    max_dd_abs = abs(metrics.get("max_drawdown_pct", 0))
+    if max_dd_abs > 0:
+        metrics["calmar_ratio"] = metrics["cagr"] / max_dd_abs
+    else:
+        metrics["calmar_ratio"] = 0.0
+    
+    # Trading days (from returns series)
+    metrics["trading_days"] = len(returns) if returns is not None else 0
+    
+    # Number of assets (from weights)
+    if weights_df is not None:
+        metrics["n_assets"] = len(weights_df.columns)
+    else:
+        metrics["n_assets"] = 0
     
     # Turnover
     if weights_df is not None:
