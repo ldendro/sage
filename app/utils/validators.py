@@ -55,6 +55,9 @@ def validate_date_range_widget(start_date, end_date):
         errors.append("Start date should be after year 2000")
     
     # Check if dates are in the future
+    if start_date >= today:
+        errors.append(f"Start date ({start_date}) cannot be today or in the future")
+
     if end_date > today:
         errors.append(f"End date ({end_date}) cannot be in the future")
     
