@@ -14,8 +14,22 @@ from app.config.defaults import (
     DEFAULT_UNIVERSE,
     DEFAULT_START_DATE,
     DEFAULT_END_DATE,
+    DEFAULT_MAX_WEIGHT_PER_ASSET,
+    DEFAULT_MAX_SECTOR_WEIGHT,
+    DEFAULT_MIN_ASSETS_HELD,
+    DEFAULT_TARGET_VOL,
+    DEFAULT_VOL_LOOKBACK,
+    DEFAULT_MIN_LEVERAGE,
+    DEFAULT_MAX_LEVERAGE,
+    DEFAULT_VOL_WINDOW,
+    BOUNDS,
 )
-from app.utils.validators import validate_universe, validate_date_range
+from app.utils.validators import (
+    validate_date_range_widget,
+    validate_risk_caps_widget,
+    validate_universe_widget,
+    validate_volatility_targeting_widget,
+)
 
 # Page configuration
 st.set_page_config(
@@ -49,9 +63,7 @@ universe = st.sidebar.multiselect(
     default=DEFAULT_UNIVERSE,
     help="Choose assets to include in the backtest"
 )
-
-# Validate universe using validators.py
-universe_errors = validate_universe(universe, AVAILABLE_TICKERS)
+universe_errors = validate_universe_widget(universe, AVAILABLE_TICKERS)
 if universe_errors:
     for error in universe_errors:
         st.sidebar.error(f"⚠️ {error}")
@@ -80,27 +92,122 @@ end_date = col2.date_input(
     "End Date",
     value=DEFAULT_END_DATE,
     min_value=min_end_date,
-    help="Backtest end date - The last active portfolio day. Default date is today's date"
+    help="Backtest end date - The last active portfolio day"
 )
-
-# Validate date range using validators.py
-date_errors = validate_date_range(start_date, end_date)
+date_errors = validate_date_range_widget(start_date, end_date)
 if date_errors:
     for error in date_errors:
         st.sidebar.error(f"⚠️ {error}")
 else:
-    # Calculate trading days (approximate)
     days_diff = (end_date - start_date).days
     st.sidebar.success(f"✓ Period: {days_diff} calendar days")
 
-st.sidebar.markdown("### ⚖️ Risk Caps")
-st.sidebar.info("Risk cap controls will appear here")
+# Sidebar - Allocator Settings (Expandable)
+with st.sidebar.expander("🔧 Allocator Settings", expanded=False):
+    vol_window = st.slider(
+        "Inverse Vol Window (trading days)",
+        min_value=BOUNDS["vol_window"][0],
+        max_value=BOUNDS["vol_window"][1],
+        value=DEFAULT_VOL_WINDOW,
+        step=10,
+        help="Lookback window for inverse volatility weight calculation in trading days"
+    )
 
-st.sidebar.markdown("### 🎯 Volatility Targeting")
-st.sidebar.info("Vol targeting controls will appear here")
+# Sidebar - Risk Caps (Expandable)
+with st.sidebar.expander("⚖️ Risk Caps", expanded=False):
+    max_weight_per_asset = st.slider(
+        "Max Weight per Asset",
+        min_value=BOUNDS["max_weight_per_asset"][0],
+        max_value=BOUNDS["max_weight_per_asset"][1],
+        value=DEFAULT_MAX_WEIGHT_PER_ASSET,
+        step=0.05,
+        format="%.2f",
+        help="Maximum allocation to any single asset (e.g., 0.25 = 25%)"
+    )
+    
+    use_sector_cap = st.checkbox(
+        "Enable Sector Weight Cap",
+        value=False,
+        help="Limit total exposure to any sector"
+    )
+    
+    if use_sector_cap:
+        max_sector_weight = st.slider(
+            "Max Sector Weight",
+            min_value=BOUNDS["max_sector_weight"][0],
+            max_value=BOUNDS["max_sector_weight"][1],
+            value=DEFAULT_MAX_SECTOR_WEIGHT,
+            step=0.05,
+            format="%.2f",
+            help="Maximum allocation to any sector (e.g., 0.6 = 60%)"
+        )
+    else:
+        max_sector_weight = None
+    
+    min_assets_held = st.number_input(
+        "Min Assets Held",
+        min_value=BOUNDS["min_assets_held"][0],
+        max_value=BOUNDS["min_assets_held"][1],
+        value=DEFAULT_MIN_ASSETS_HELD,
+        step=1,
+        help="Minimum number of assets to hold in the portfolio"
+    )
+    risk_caps_errors = validate_risk_caps_widget(
+        min_assets_held=min_assets_held,
+        universe=universe,
+        max_weight_per_asset=max_weight_per_asset,
+        max_sector_weight=max_sector_weight,
+    )
+    if risk_caps_errors:
+        for error in risk_caps_errors:
+            st.error(f"⚠️ {error}")
 
-st.sidebar.markdown("### 🔧 Allocator Settings")
-st.sidebar.info("Allocator controls will appear here")
+# Sidebar - Volatility Targeting (Expandable)
+with st.sidebar.expander("🎯 Volatility Targeting", expanded=False):
+    target_vol = st.slider(
+        "Target Volatility",
+        min_value=BOUNDS["target_vol"][0],
+        max_value=BOUNDS["target_vol"][1],
+        value=DEFAULT_TARGET_VOL,
+        step=0.01,
+        format="%.2f",
+        help="Target annual volatility (e.g., 0.10 = 10% annualized)"
+    )
+    
+    vol_lookback = st.slider(
+        "Vol Lookback (trading days)",
+        min_value=BOUNDS["vol_lookback"][0],
+        max_value=BOUNDS["vol_lookback"][1],
+        value=DEFAULT_VOL_LOOKBACK,
+        step=10,
+        help="Rolling window for volatility calculation in trading days"
+    )
+    
+    col1, col2 = st.columns(2)
+    
+    min_leverage = col1.number_input(
+        "Min Leverage",
+        min_value=BOUNDS["min_leverage"][0],
+        max_value=BOUNDS["min_leverage"][1],
+        value=DEFAULT_MIN_LEVERAGE,
+        step=0.1,
+        format="%.1f",
+        help="Minimum portfolio leverage"
+    )
+    
+    max_leverage = col2.number_input(
+        "Max Leverage",
+        min_value=BOUNDS["max_leverage"][0],
+        max_value=BOUNDS["max_leverage"][1],
+        value=DEFAULT_MAX_LEVERAGE,
+        step=0.1,
+        format="%.1f",
+        help="Maximum portfolio leverage"
+    )
+    volatility_errors = validate_volatility_targeting_widget(min_leverage, max_leverage)
+    if volatility_errors:
+        for error in volatility_errors:
+            st.error(f"⚠️ {error}")
 
 # Placeholder run button
 st.sidebar.markdown("---")
