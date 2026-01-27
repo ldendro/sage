@@ -460,7 +460,7 @@ elif st.session_state.backtest_results is not None:
         st.plotly_chart(fig_equity, use_container_width=True)
     
     # Drawdown Chart
-    drawdown_series = metrics.get("drawdown_series")
+    drawdown_series = results.get("drawdown_series")
     if drawdown_series is not None and len(drawdown_series) > 0:
         fig_drawdown = create_drawdown_chart(drawdown_series)
         st.plotly_chart(fig_drawdown, use_container_width=True)
