@@ -184,6 +184,10 @@ def run_system_walkforward(
     # Step 9: Build equity curve (starting at 100)
     equity_curve = (1 + final_portfolio_returns_clean).cumprod() * 100
     
+    # Calculate drawdown series for charting
+    running_max = equity_curve.expanding().max()
+    drawdown_series = (equity_curve - running_max) / running_max
+    
     # Step 10: Calculate metrics
     metrics = calculate_all_metrics(
         returns=final_portfolio_returns_clean,
@@ -195,6 +199,7 @@ def run_system_walkforward(
     return {
         "returns": final_portfolio_returns_clean,
         "equity_curve": equity_curve,
+        "drawdown_series": drawdown_series,  # Separate from metrics for charting
         "weights": final_weights_clean,  # Final weights (post-leverage caps)
         "vol_targeted_weights": vol_targeted_weights_clean,  # Pre-cap weights (for analysis)
         "raw_weights": capped_weights_clean,  # Pre-vol-targeting weights
