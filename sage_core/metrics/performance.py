@@ -356,6 +356,11 @@ def calculate_all_metrics(
     else:
         metrics["n_assets"] = 0
     
+    # Drawdown time series (for charting)
+    running_max = equity_curve.expanding().max()
+    drawdown_series = (equity_curve - running_max) / running_max
+    metrics["drawdown_series"] = drawdown_series
+    
     # Turnover
     if weights_df is not None:
         turnover_series = calculate_turnover(weights_df, returns_df)

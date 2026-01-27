@@ -446,9 +446,28 @@ elif st.session_state.backtest_results is not None:
                 help="Portfolio has not recovered to peak"
             )
     
-    # Placeholder for charts (will be implemented in Steps 2.6-2.8)
+    # Charts Section
     st.markdown("---")
-    st.info("📈 Charts and detailed analysis will be added in upcoming steps.")
+    st.markdown("### 📈 Performance Visualizations")
+    
+    # Import chart utilities
+    from app.utils.charts import create_equity_curve_chart, create_drawdown_chart
+    
+    # Equity Curve Chart
+    equity_curve = results.get("equity_curve")
+    if equity_curve is not None and len(equity_curve) > 0:
+        fig_equity = create_equity_curve_chart(equity_curve)
+        st.plotly_chart(fig_equity, use_container_width=True)
+    
+    # Drawdown Chart
+    drawdown_series = metrics.get("drawdown_series")
+    if drawdown_series is not None and len(drawdown_series) > 0:
+        fig_drawdown = create_drawdown_chart(drawdown_series)
+        st.plotly_chart(fig_drawdown, use_container_width=True)
+    
+    # Placeholder for weight allocation chart (Step 2.8)
+    st.markdown("---")
+    st.info("📊 Weight allocation chart will be added in Step 2.8.")
     
     # Show cached parameters
     with st.expander("🔧 Backtest Parameters", expanded=False):
