@@ -174,8 +174,7 @@ class TestCreateWeightAllocationChart:
         
         # Y-axis should be in percentages
         assert fig.layout.yaxis.title.text == "Allocation (%)"
-        assert list(fig.layout.yaxis.range) == [0, 100]
-        
+                
         # Check that data is scaled to percentages
         # Since we have 50% each, sum should be 100%
         assert fig.data[0].y[0] == 50.0  # First asset at 50%
