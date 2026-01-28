@@ -451,7 +451,11 @@ elif st.session_state.backtest_results is not None:
     st.markdown("### 📈 Performance Visualizations")
     
     # Import chart utilities
-    from app.utils.charts import create_equity_curve_chart, create_drawdown_chart
+    from app.utils.charts import (
+        create_equity_curve_chart,
+        create_drawdown_chart,
+        create_weight_allocation_chart,
+    )
     
     # Equity Curve Chart
     equity_curve = results.get("equity_curve")
@@ -465,9 +469,15 @@ elif st.session_state.backtest_results is not None:
         fig_drawdown = create_drawdown_chart(drawdown_series)
         st.plotly_chart(fig_drawdown, use_container_width=True)
     
-    # Placeholder for weight allocation chart (Step 2.8)
+    # Weight Allocation Chart
     st.markdown("---")
-    st.info("📊 Weight allocation chart will be added in Step 2.8.")
+    st.markdown("### 📊 Portfolio Allocation")
+    weights = results.get("weights")
+    if weights is not None and not weights.empty:
+        fig_weights = create_weight_allocation_chart(weights)
+        st.plotly_chart(fig_weights, use_container_width=True)
+    else:
+        st.warning("No weight allocation data available.")
     
     # Show cached parameters
     with st.expander("🔧 Backtest Parameters", expanded=False):
