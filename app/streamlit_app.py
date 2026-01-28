@@ -311,145 +311,6 @@ elif st.session_state.backtest_results is not None:
     
     st.success("✅ Backtest completed successfully!")
     
-    # Primary Metrics Row (5 cards)
-    st.markdown("### 📊 Key Performance Metrics")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        total_return = metrics.get("total_return", 0)
-        st.metric(
-            "Total Return",
-            format_percentage(total_return),
-            help="Total cumulative return over the backtest period"
-        )
-    
-    with col2:
-        cagr = metrics.get("cagr", 0)
-        st.metric(
-            "CAGR",
-            format_percentage(cagr),
-            help="Compound Annual Growth Rate"
-        )
-    
-    with col3:
-        sharpe = metrics.get("sharpe_ratio", 0)
-        st.metric(
-            "Sharpe Ratio",
-            format_ratio(sharpe),
-            help="Risk-adjusted return (annualized)"
-        )
-    
-    with col4:
-        max_dd = metrics.get("max_drawdown_pct", metrics.get("max_drawdown", 0))
-        st.metric(
-            "Max Drawdown",
-            format_percentage(max_dd),
-            help="Maximum peak-to-trough decline"
-        )
-    
-    with col5:
-        volatility = metrics.get("volatility", 0)
-        st.metric(
-            "Volatility",
-            format_percentage(volatility),
-            help="Annualized standard deviation of returns"
-        )
-    
-    # Secondary Metrics Row (5 cards)
-    st.markdown("### 📈 Additional Metrics")
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        calmar = metrics.get("calmar_ratio", 0)
-        st.metric(
-            "Calmar Ratio",
-            format_ratio(calmar),
-            help="CAGR / Max Drawdown (risk-adjusted)"
-        )
-    
-    with col2:
-        avg_turnover = metrics.get("avg_daily_turnover", 0)
-        st.metric(
-            "Avg Daily Turnover",
-            format_percentage(avg_turnover),
-            help="Average daily portfolio turnover"
-        )
-    
-    with col3:
-        total_turnover = metrics.get("total_turnover", 0)
-        st.metric(
-            "Total Turnover",
-            format_ratio(total_turnover, decimals=1) + "x",
-            help="Total portfolio turnover over the period"
-        )
-    
-    with col4:
-        trading_days = metrics.get("trading_days", 0)
-        st.metric(
-            "Trading Days",
-            f"{trading_days:,}",
-            help="Number of trading days in backtest"
-        )
-    
-    with col5:
-        n_assets = metrics.get("n_assets", 0)
-        st.metric(
-            "Assets",
-            f"{n_assets}",
-            help="Number of assets in the portfolio"
-        )
-    
-    # Drawdown Details Section
-    st.markdown("### 📉 Drawdown Analysis")
-    
-    dd_col1, dd_col2, dd_col3, dd_col4 = st.columns(4)
-    
-    with dd_col1:
-        peak_date = metrics.get("peak_date")
-        st.metric(
-            "Peak Date",
-            format_date(peak_date),
-            help="Date of portfolio peak before maximum drawdown"
-        )
-    
-    with dd_col2:
-        trough_date = metrics.get("trough_date")
-        st.metric(
-            "Trough Date",
-            format_date(trough_date),
-            help="Date of maximum drawdown"
-        )
-    
-    with dd_col3:
-        dd_duration = metrics.get("drawdown_duration_days", 0)
-        st.metric(
-            "Drawdown Duration",
-            format_days(dd_duration),
-            help="Days from peak to trough"
-        )
-    
-    with dd_col4:
-        recovery_days = metrics.get("recovery_duration_days")
-        recovery_date = metrics.get("recovery_date")
-        if recovery_date is not None:
-            st.metric(
-                "Recovery",
-                format_days(recovery_days),
-                help=f"Recovered on {format_date(recovery_date)}"
-            )
-        else:
-            st.metric(
-                "Recovery",
-                "Not Recovered",
-                help="Portfolio has not recovered to peak"
-            )
-    
-    # Charts Section
-    st.markdown("---")
-    st.markdown("### 📈 Performance Visualizations")
-    
     # Import chart utilities
     from app.utils.charts import (
         create_equity_curve_chart,
@@ -457,27 +318,241 @@ elif st.session_state.backtest_results is not None:
         create_weight_allocation_chart,
     )
     
-    # Equity Curve Chart
-    equity_curve = results.get("equity_curve")
-    if equity_curve is not None and len(equity_curve) > 0:
-        fig_equity = create_equity_curve_chart(equity_curve)
-        st.plotly_chart(fig_equity, use_container_width=True)
+    # Create tabbed interface
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Key Performance",
+        "📉 Drawdown Analysis", 
+        "💼 Portfolio Allocation",
+        "📅 Yearly Performance"
+    ])
     
-    # Drawdown Chart
-    drawdown_series = results.get("drawdown_series")
-    if drawdown_series is not None and len(drawdown_series) > 0:
-        fig_drawdown = create_drawdown_chart(drawdown_series)
-        st.plotly_chart(fig_drawdown, use_container_width=True)
+    # ==================== TAB 1: KEY PERFORMANCE ====================
+    with tab1:
+        # Primary Metrics Row (5 cards)
+        st.markdown("### Key Performance Metrics")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            total_return = metrics.get("total_return", 0)
+            st.metric(
+                "Total Return",
+                format_percentage(total_return),
+                help="Total cumulative return over the backtest period"
+            )
+        
+        with col2:
+            cagr = metrics.get("cagr", 0)
+            st.metric(
+                "CAGR",
+                format_percentage(cagr),
+                help="Compound Annual Growth Rate"
+            )
+        
+        with col3:
+            sharpe = metrics.get("sharpe_ratio", 0)
+            st.metric(
+                "Sharpe Ratio",
+                format_ratio(sharpe),
+                help="Risk-adjusted return (annualized)"
+            )
+        
+        with col4:
+            max_dd = metrics.get("max_drawdown_pct", metrics.get("max_drawdown", 0))
+            st.metric(
+                "Max Drawdown",
+                format_percentage(max_dd),
+                help="Maximum peak-to-trough decline"
+            )
+        
+        with col5:
+            volatility = metrics.get("volatility", 0)
+            st.metric(
+                "Volatility",
+                format_percentage(volatility),
+                help="Annualized standard deviation of returns"
+            )
+        
+        # Secondary Metrics Row (5 cards)
+        st.markdown("### Additional Metrics")
+        
+        col1, col2, col3, col4, col5 = st.columns(5)
+        
+        with col1:
+            calmar = metrics.get("calmar_ratio", 0)
+            st.metric(
+                "Calmar Ratio",
+                format_ratio(calmar),
+                help="CAGR / Max Drawdown (risk-adjusted)"
+            )
+        
+        with col2:
+            avg_turnover = metrics.get("avg_daily_turnover", 0)
+            st.metric(
+                "Avg Daily Turnover",
+                format_percentage(avg_turnover),
+                help="Average daily portfolio turnover"
+            )
+        
+        with col3:
+            total_turnover = metrics.get("total_turnover", 0)
+            st.metric(
+                "Total Turnover",
+                format_ratio(total_turnover, decimals=1) + "x",
+                help="Total portfolio turnover over the period"
+            )
+        
+        with col4:
+            trading_days = metrics.get("trading_days", 0)
+            st.metric(
+                "Trading Days",
+                f"{trading_days:,}",
+                help="Number of trading days in backtest"
+            )
+        
+        with col5:
+            n_assets = metrics.get("n_assets", 0)
+            st.metric(
+                "Assets",
+                f"{n_assets}",
+                help="Number of assets in the portfolio"
+            )
+        
+        # Equity Curve Chart
+        st.markdown("### Equity Curve")
+        equity_curve = results.get("equity_curve")
+        if equity_curve is not None and len(equity_curve) > 0:
+            fig_equity = create_equity_curve_chart(equity_curve)
+            st.plotly_chart(fig_equity, use_container_width=True)
+        else:
+            st.warning("No equity curve data available.")
     
-    # Weight Allocation Chart
-    st.markdown("---")
-    st.markdown("### 📊 Portfolio Allocation")
-    weights = results.get("weights")
-    if weights is not None and not weights.empty:
-        fig_weights = create_weight_allocation_chart(weights)
-        st.plotly_chart(fig_weights, use_container_width=True)
-    else:
-        st.warning("No weight allocation data available.")
+    # ==================== TAB 2: DRAWDOWN ANALYSIS ====================
+    with tab2:
+        st.markdown("### Drawdown Metrics")
+        
+        # Drawdown metrics in columns
+        dd_col1, dd_col2, dd_col3 = st.columns(3)
+        
+        with dd_col1:
+            st.metric(
+                "Max Drawdown",
+                format_percentage(max_dd),
+                help="Maximum peak-to-trough decline"
+            )
+            
+            peak_date = metrics.get("peak_date")
+            st.metric(
+                "Peak Date",
+                format_date(peak_date),
+                help="Date of portfolio peak before maximum drawdown"
+            )
+        
+        with dd_col2:
+            dd_duration = metrics.get("drawdown_duration_days", 0)
+            st.metric(
+                "Drawdown Duration",
+                format_days(dd_duration),
+                help="Days from peak to trough"
+            )
+            
+            trough_date = metrics.get("trough_date")
+            st.metric(
+                "Trough Date",
+                format_date(trough_date),
+                help="Date of maximum drawdown"
+            )
+        
+        with dd_col3:
+            recovery_date = metrics.get("recovery_date")
+            recovery_days = metrics.get("recovery_duration_days")
+            
+            if recovery_date is not None:
+                st.metric(
+                    "Recovery Date",
+                    format_date(recovery_date),
+                    help="Date when portfolio recovered to peak"
+                )
+                st.metric(
+                    "Recovery Duration",
+                    format_days(recovery_days),
+                    help="Days from trough to recovery"
+                )
+            else:
+                st.metric(
+                    "Recovery Status",
+                    "Not Recovered",
+                    help="Portfolio has not recovered to peak"
+                )
+                st.metric(
+                    "Recovery Duration",
+                    "N/A",
+                    help="Not applicable - portfolio not recovered"
+                )
+        
+        # Drawdown Chart
+        st.markdown("### Underwater Chart")
+        drawdown_series = results.get("drawdown_series")
+        if drawdown_series is not None and len(drawdown_series) > 0:
+            fig_drawdown = create_drawdown_chart(drawdown_series)
+            st.plotly_chart(fig_drawdown, use_container_width=True)
+        else:
+            st.warning("No drawdown data available.")
+    
+    # ==================== TAB 3: PORTFOLIO ALLOCATION ====================
+    with tab3:
+        st.markdown("### Weight Allocation Over Time")
+        
+        weights = results.get("weights")
+        if weights is not None and not weights.empty:
+            fig_weights = create_weight_allocation_chart(weights)
+            st.plotly_chart(fig_weights, use_container_width=True)
+        else:
+            st.warning("No weight allocation data available.")
+        
+        # Placeholder for future enhancements
+        st.markdown("---")
+        st.info("""
+        **🔮 Future Enhancements**
+        
+        This tab will be expanded to include:
+        - Risk contribution analysis
+        - Sector exposure breakdown
+        - Asset correlation heatmap
+        - Additional portfolio analytics
+        """)
+    
+    # ==================== TAB 4: YEARLY PERFORMANCE ====================
+    with tab4:
+        st.markdown("### Yearly Performance Summary")
+        
+        yearly_summary = metrics.get("yearly_summary")
+        
+        if yearly_summary is not None and not yearly_summary.empty:
+            # Format the yearly summary DataFrame for display
+            display_df = yearly_summary.copy()
+            display_df = display_df.sort_values("year", ascending=False)  # Most recent first
+            
+            # Format columns for display
+            display_df["Year"] = display_df["year"].astype(int)
+            display_df["Total Return"] = display_df["total_return"].apply(lambda x: format_percentage(x))
+            display_df["Sharpe Ratio"] = display_df["sharpe"].apply(lambda x: format_ratio(x))
+            display_df["Max Drawdown"] = display_df["max_drawdown"].apply(lambda x: format_percentage(x))
+            display_df["Volatility"] = display_df["volatility"].apply(lambda x: format_percentage(x))
+            
+            # Select and reorder columns for display
+            display_df = display_df[["Year", "Total Return", "Sharpe Ratio", "Max Drawdown", "Volatility"]]
+            
+            # Display as interactive table
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True,
+            )
+            
+            st.caption(f"📊 Performance breakdown across {len(display_df)} years")
+        else:
+            st.info("No yearly summary data available.")
     
     # Show cached parameters
     with st.expander("🔧 Backtest Parameters", expanded=False):
