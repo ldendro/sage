@@ -2,10 +2,11 @@
 
 import streamlit as st
 import sys
-from datetime import date, timedelta
+import json
+import pandas as pd
+from datetime import date, timedelta, datetime
 from pathlib import Path
 
-# Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
@@ -29,8 +30,8 @@ from app.utils.validators import (
     validate_universe_widget,
     validate_volatility_targeting_widget,
 )
+from app.components import render_header
 
-# Page configuration
 st.set_page_config(
     page_title="Sage Backtesting Engine",
     page_icon="📈",
@@ -38,12 +39,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Header
-st.title("📈 Sage Backtesting Engine")
-st.markdown("Interactive backtesting dashboard for quantitative strategies")
+# ==================== HEADER ====================
+render_header(
+    "Sage Backtesting Engine",
+    "Interactive backtesting dashboard for quantitative strategies",
+    icon_path=Path(__file__).parent / "images" / "SAGEICON.png",
+)
 
-# Sidebar
-st.sidebar.header("⚙️ Configuration")
+# ==================== CONFIGURATION ====================
+st.sidebar.header("Configuration")
 st.sidebar.info("""
 💡 **Quick Start**
 1. Select assets from the universe
@@ -52,9 +56,9 @@ st.sidebar.info("""
 4. Click 'Run Backtest'
 """)
 
-# Sidebar - Universe Selection
+# ==================== UNIVERSE SELECTION ====================
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📊 Universe Selection")
+st.sidebar.markdown("### Universe Selection")
 
 universe = st.sidebar.multiselect(
     "Select Assets",
@@ -69,8 +73,8 @@ if universe_errors:
 else:
     st.sidebar.success(f"✓ {len(universe)} asset(s) selected")
 
-# Sidebar - Date Range
-st.sidebar.markdown("### 📅 Date Range")
+# ==================== DATE RANGE ====================
+st.sidebar.markdown("### Date Range")
 
 col1, col2 = st.sidebar.columns(2)
 
@@ -82,7 +86,6 @@ start_date = col1.date_input(
     help="Backtest start date - The first active portfolio day"
 )
 
-# Calculate dynamic end date defaults
 if start_date is not None:
     min_end_date = start_date + timedelta(days=1)
 else:
@@ -103,8 +106,8 @@ else:
     days_diff = (end_date - start_date).days
     st.sidebar.success(f"✓ Period: {days_diff} calendar days")
 
-# Sidebar - Allocator Settings (Expandable)
-with st.sidebar.expander("🔧 Allocator Settings", expanded=False):
+# ==================== ALLOCATOR SETTINGS ====================
+with st.sidebar.expander("Allocator Settings", expanded=False):
     vol_window = st.slider(
         "Inverse Vol Window (trading days)",
         min_value=BOUNDS["vol_window"][0],
@@ -114,8 +117,8 @@ with st.sidebar.expander("🔧 Allocator Settings", expanded=False):
         help="Lookback window for inverse volatility weight calculation in trading days"
     )
 
-# Sidebar - Risk Caps (Expandable)
-with st.sidebar.expander("⚖️ Risk Caps", expanded=False):
+# ==================== RISK CAPS ====================
+with st.sidebar.expander("Risk Caps", expanded=False):
     max_weight_per_asset = st.slider(
         "Max Weight per Asset",
         min_value=BOUNDS["max_weight_per_asset"][0],
@@ -163,8 +166,8 @@ with st.sidebar.expander("⚖️ Risk Caps", expanded=False):
         for error in risk_caps_errors:
             st.error(f"⚠️ {error}")
 
-# Sidebar - Volatility Targeting (Expandable)
-with st.sidebar.expander("🎯 Volatility Targeting", expanded=False):
+# ==================== VOLATILITY TARGETING ====================
+with st.sidebar.expander("Volatility Targeting", expanded=False):
     target_vol = st.slider(
         "Target Volatility",
         min_value=BOUNDS["target_vol"][0],
@@ -210,11 +213,10 @@ with st.sidebar.expander("🎯 Volatility Targeting", expanded=False):
         for error in volatility_errors:
             st.error(f"⚠️ {error}")
 
-# Aggregate all validation errors
+# ==================== RUN BACKTEST BUTTON ====================
 all_errors = universe_errors + date_errors + risk_caps_errors + volatility_errors
 has_errors = len(all_errors) > 0
 
-# Run Backtest Button
 st.sidebar.markdown("---")
 
 if has_errors:
@@ -234,7 +236,23 @@ else:
         help="Run backtest with current parameters"
     )
 
-# Initialize session state for results
+# ==================== ABOUT SECTION ====================
+
+st.sidebar.markdown("---")
+st.sidebar.markdown("### About")
+st.sidebar.info("""
+**Sage Backtesting Engine v2.0**
+
+A comprehensive backtesting platform for portfolio strategies featuring:
+- Inverse volatility weighting
+- Risk caps & sector constraints  
+- Volatility targeting
+- Detailed performance analytics
+
+Built with Streamlit & Plotly
+""")
+
+# ==================== SESSION STATE INITIALIZATION ====================
 if "backtest_results" not in st.session_state:
     st.session_state.backtest_results = None
 if "backtest_params" not in st.session_state:
@@ -242,7 +260,7 @@ if "backtest_params" not in st.session_state:
 if "backtest_error" not in st.session_state:
     st.session_state.backtest_error = None
 
-# Execute backtest when button is clicked
+# ==================== BACKTEST EXECUTION ====================
 if not has_errors and run_clicked:
     # Build current parameters dict for caching comparison
     current_params = {
@@ -259,7 +277,6 @@ if not has_errors and run_clicked:
         "vol_window": vol_window,
     }
     
-    # Import engine here to avoid circular imports
     from sage_core.walkforward.engine import run_system_walkforward
     
     with st.spinner("🔄 Running backtest... This may take a moment."):
@@ -288,7 +305,7 @@ if not has_errors and run_clicked:
             st.session_state.backtest_params = None
             st.session_state.backtest_error = str(e)
 
-# Main content area
+# ==================== MAIN CONTENT AREA ====================
 if st.session_state.backtest_error:
     st.error(f"❌ **Backtest Failed**\n\n{st.session_state.backtest_error}")
     
@@ -320,16 +337,17 @@ elif st.session_state.backtest_results is not None:
     
     # Create tabbed interface
     tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 Key Performance",
-        "📉 Drawdown Analysis", 
-        "💼 Portfolio Allocation",
-        "📅 Yearly Performance"
+        "Key Performance",
+        "Drawdown Analysis", 
+        "Portfolio Allocation",
+        "Yearly Performance"
     ])
     
     # ==================== TAB 1: KEY PERFORMANCE ====================
     with tab1:
         # Primary Metrics Row (5 cards)
         st.markdown("### Key Performance Metrics")
+        st.caption("Overview of primary performance metrics and equity curve visualization")
         
         col1, col2, col3, col4, col5 = st.columns(5)
         
@@ -418,19 +436,51 @@ elif st.session_state.backtest_results is not None:
                 help="Number of assets in the portfolio"
             )
         
+        # Create metrics DataFrame for export
+        metrics_export_data = {
+            "Metric": [
+                "Total Return", "CAGR", "Sharpe Ratio", "Max Drawdown", "Volatility",
+                "Calmar Ratio", "Avg Daily Turnover", "Total Turnover", "Trading Days", "Assets"
+            ],
+            "Value": [
+                format_percentage(metrics.get("total_return", 0)),
+                format_percentage(metrics.get("cagr", 0)),
+                format_ratio(metrics.get("sharpe_ratio", 0)),
+                format_percentage(metrics.get("max_drawdown_pct", 0)),
+                format_percentage(metrics.get("volatility", 0)),
+                format_ratio(metrics.get("calmar_ratio", 0)),
+                format_percentage(metrics.get("avg_daily_turnover", 0)),
+                format_ratio(metrics.get("total_turnover", 0), decimals=1) + "x",
+                f"{metrics.get('trading_days', 0):,}",
+                str(metrics.get("n_assets", 0))
+            ]
+        }
+        metrics_df = pd.DataFrame(metrics_export_data)
+        csv = metrics_df.to_csv(index=False)
+        
+        st.download_button(
+            label="📥 Download Metrics (CSV)",
+            data=csv,
+            file_name=f"sage_backtest_metrics_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv",
+            mime="text/csv",
+            help="Download all performance metrics as CSV"
+        )
+        
         # Equity Curve Chart
-        st.markdown("### Equity Curve")
+        st.markdown("---")
         equity_curve = results.get("equity_curve")
         if equity_curve is not None and len(equity_curve) > 0:
             fig_equity = create_equity_curve_chart(equity_curve)
-            st.plotly_chart(fig_equity, use_container_width=True)
+            st.plotly_chart(fig_equity, width='stretch')
+            st.caption("💡 *Tip: Use the camera icon (📷) in the chart toolbar to download as PNG*")
         else:
             st.warning("No equity curve data available.")
-    
+
     # ==================== TAB 2: DRAWDOWN ANALYSIS ====================
     with tab2:
         st.markdown("### Drawdown Metrics")
-        
+        st.caption("Overview of drawdown metrics and underwater chart visualization")
+
         # Drawdown metrics in columns
         dd_col1, dd_col2, dd_col3 = st.columns(3)
         
@@ -491,22 +541,26 @@ elif st.session_state.backtest_results is not None:
                 )
         
         # Drawdown Chart
-        st.markdown("### Underwater Chart")
+        st.markdown("---")
         drawdown_series = results.get("drawdown_series")
         if drawdown_series is not None and len(drawdown_series) > 0:
             fig_drawdown = create_drawdown_chart(drawdown_series)
-            st.plotly_chart(fig_drawdown, use_container_width=True)
+            st.plotly_chart(fig_drawdown, width='stretch')
+            st.caption("💡 *Tip: Use the camera icon (📷) in the chart toolbar to download as PNG*")
         else:
             st.warning("No drawdown data available.")
     
     # ==================== TAB 3: PORTFOLIO ALLOCATION ====================
     with tab3:
         st.markdown("### Weight Allocation Over Time")
+        st.caption("Visualization of asset weights over the backtest period")
         
+        st.markdown("---")
         weights = results.get("weights")
         if weights is not None and not weights.empty:
             fig_weights = create_weight_allocation_chart(weights)
-            st.plotly_chart(fig_weights, use_container_width=True)
+            st.plotly_chart(fig_weights, width='stretch')
+            st.caption("💡 *Tip: Use the camera icon (📷) in the chart toolbar to download as PNG*")
         else:
             st.warning("No weight allocation data available.")
         
@@ -524,9 +578,10 @@ elif st.session_state.backtest_results is not None:
     
     # ==================== TAB 4: YEARLY PERFORMANCE ====================
     with tab4:
-        st.markdown("### Yearly Performance Summary")
-        
         yearly_summary = metrics.get("yearly_summary")
+        
+        st.markdown("### Yearly Performance Summary")
+        st.caption(f"Performance breakdown across {len(yearly_summary)} years")
         
         if yearly_summary is not None and not yearly_summary.empty:
             # Format the yearly summary DataFrame for display
@@ -549,12 +604,21 @@ elif st.session_state.backtest_results is not None:
                 use_container_width=True,
                 hide_index=True,
             )
-            
-            st.caption(f"📊 Performance breakdown across {len(display_df)} years")
+                        
+            # Export yearly summary
+            csv_yearly = display_df.to_csv(index=False)
+            st.download_button(
+                label="📥 Download Yearly Summary (CSV)",
+                data=csv_yearly,
+                file_name=f"sage_backtest_yearly_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.csv",
+                mime="text/csv",
+                help="Download yearly performance summary as CSV"
+            )
         else:
             st.info("No yearly summary data available.")
     
-    # Show cached parameters
+    # ==================== BACKTEST PARAMETERS ====================
+    st.markdown("---")
     with st.expander("🔧 Backtest Parameters", expanded=False):
         params = st.session_state.backtest_params
         if params:
@@ -569,10 +633,19 @@ elif st.session_state.backtest_results is not None:
                 st.write("**Vol Lookback:**", f"{params['vol_lookback']} days")
                 st.write("**Leverage Range:**", f"{params['min_leverage']:.1f}x - {params['max_leverage']:.1f}x")
                 st.write("**Vol Window:**", f"{params['vol_window']} days")
+            
+            # Export configuration
+            config_json = json.dumps(params, indent=2, default=str)
+            st.download_button(
+                label="📥 Download Configuration (JSON)",
+                data=config_json,
+                file_name=f"sage_backtest_config_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.json",
+                mime="application/json",
+                help="Download backtest configuration for reproducibility"
+            )
 
 else:
     st.info("👈 Configure parameters in the sidebar and click 'Run Backtest' to begin")
 
-# Footer
-st.markdown("---")
+# ==================== FOOTER ====================
 st.caption("Sage Backtesting Engine v2.0 | Phase 2: Streamlit App")
