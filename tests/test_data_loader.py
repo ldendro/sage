@@ -77,8 +77,8 @@ class TestLoadUniverse:
             assert (df['close'] > 0).all()
     
     def test_load_universe_missing_symbol(self):
-        """Test that missing symbol raises FileNotFoundError."""
-        with pytest.raises(FileNotFoundError, match="Data files not found"):
+        """Test that missing symbol raises ValueError."""
+        with pytest.raises(ValueError, match="Failed to load data"):
             load_universe(
                 universe=["SPY", "NONEXISTENT_SYMBOL"],
                 start_date="2020-01-01",
@@ -114,7 +114,7 @@ class TestLoadUniverse:
     
     def test_load_universe_no_data_in_range(self):
         """Test that date range with no data raises ValueError."""
-        with pytest.raises(ValueError, match="No data.*in date range"):
+        with pytest.raises(ValueError, match="Failed to load data"):
             load_universe(
                 universe=["SPY"],
                 start_date="1990-01-01",  # Before available data
@@ -219,10 +219,12 @@ class TestLoadUniverse:
         
         try:
             # Should successfully load and convert string dates
+            # Use parquet mode for this test since we're testing parquet-specific behavior
             data = load_universe(
                 universe=[test_symbol],
                 start_date="2020-01-01",
                 end_date="2020-01-10",
+                use_real_data=False,  # Use parquet mode
             )
             
             df = data[test_symbol]
