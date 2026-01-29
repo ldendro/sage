@@ -236,6 +236,46 @@ else:
         help="Run backtest with current parameters"
     )
 
+# ==================== ADVANCED SETTINGS ====================
+
+st.sidebar.markdown("---")
+with st.sidebar.expander("⚙️ Advanced Settings", expanded=False):
+    st.markdown("**Data Cache Management**")
+    
+    # Import cache utilities
+    from sage_core.data.cache import get_cache_size, clear_cache
+    
+    # Show cache stats
+    cache_count, cache_size_bytes = get_cache_size()
+    cache_size_mb = cache_size_bytes / (1024 * 1024)
+    
+    if cache_count > 0:
+        st.caption(f"📊 Cache: {cache_count} file(s), {cache_size_mb:.2f} MB")
+    else:
+        st.caption("📊 Cache: Empty")
+    
+    # Clear cache button
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🗑️ Clear Cache", help="Clear all cached market data", use_container_width=True):
+            deleted = clear_cache()
+            if deleted > 0:
+                st.success(f"Deleted {deleted} cache file(s)")
+            else:
+                st.info("Cache was already empty")
+    
+    with col2:
+        if st.button("🔄 Refresh", help="Refresh cache statistics", use_container_width=True):
+            st.rerun()
+    
+    st.markdown("---")
+    st.caption("""
+    **Cache Info:**
+    - Historical data cached for 24 hours
+    - Recent data (last 7 days) cached for 1 hour
+    - Cache location: `~/.sage/cache/`
+    """)
+
 # ==================== ABOUT SECTION ====================
 
 st.sidebar.markdown("---")
@@ -244,6 +284,7 @@ st.sidebar.info("""
 **Sage Backtesting Engine v2.0**
 
 A comprehensive backtesting platform for portfolio strategies featuring:
+- Real market data (Yahoo Finance)
 - Inverse volatility weighting
 - Risk caps & sector constraints  
 - Volatility targeting
@@ -307,12 +348,55 @@ if not has_errors and run_clicked:
 
 # ==================== MAIN CONTENT AREA ====================
 if st.session_state.backtest_error:
-    st.error(f"❌ **Backtest Failed**\n\n{st.session_state.backtest_error}")
+    error_msg = st.session_state.backtest_error
     
-    with st.expander("🔍 Error Details", expanded=False):
-        st.code(st.session_state.backtest_error)
+    # Provide specific error messages based on error type
+    if "No data returned" in error_msg or "possibly delisted" in error_msg:
+        st.error("❌ **Invalid Ticker Symbol**")
+        st.markdown(f"**Error:** {error_msg}")
+        st.info("""
+        💡 **Suggestions:**
+        - Verify ticker symbols are correct (e.g., 'SPY', 'QQQ', 'AAPL')
+        - Check that tickers are listed on major exchanges
+        - Try using different ticker symbols
+        """)
     
-    st.info("👈 Adjust parameters in the sidebar and try again")
+    elif "Failed to load data" in error_msg:
+        st.error("❌ **Data Loading Failed**")
+        st.markdown(f"**Error:** {error_msg}")
+        st.info("""
+        💡 **Suggestions:**
+        - Check your internet connection
+        - Verify ticker symbols are valid
+        - Try clearing the cache (Advanced Settings)
+        - Try a different date range
+        """)
+    
+    elif "No data" in error_msg and "date range" in error_msg:
+        st.error("❌ **No Data Available for Date Range**")
+        st.markdown(f"**Error:** {error_msg}")
+        st.info("""
+        💡 **Suggestions:**
+        - Try a more recent date range (e.g., 2020-2024)
+        - Some tickers may not have historical data before their IPO
+        - Check the available date range for your tickers
+        """)
+    
+    elif "must be before" in error_msg:
+        st.error("❌ **Invalid Date Range**")
+        st.markdown(f"**Error:** {error_msg}")
+        st.info("""
+        💡 **Suggestion:**
+        - Ensure Start Date is before End Date
+        """)
+    
+    else:
+        # Generic error
+        st.error(f"❌ **Backtest Failed**\n\n{error_msg}")
+        st.info("👈 Adjust parameters in the sidebar and try again")
+    
+    with st.expander("🔍 Full Error Details", expanded=False):
+        st.code(error_msg)
 
 elif st.session_state.backtest_results is not None:
     results = st.session_state.backtest_results
