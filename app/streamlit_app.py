@@ -581,9 +581,9 @@ elif st.session_state.backtest_results is not None:
         yearly_summary = metrics.get("yearly_summary")
         
         st.markdown("### Yearly Performance Summary")
-        st.caption(f"Performance breakdown across {len(yearly_summary)} years")
         
         if yearly_summary is not None and not yearly_summary.empty:
+            st.caption(f"Performance breakdown across {len(yearly_summary)} years")
             # Format the yearly summary DataFrame for display
             display_df = yearly_summary.copy()
             display_df = display_df.sort_values("year", ascending=False)  # Most recent first
