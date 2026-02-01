@@ -4,6 +4,7 @@ import streamlit as st
 import sys
 import json
 import pandas as pd
+import logging
 from datetime import date, timedelta, datetime
 from pathlib import Path
 
@@ -31,6 +32,15 @@ from app.utils.validators import (
     validate_volatility_targeting_widget,
 )
 from app.components import render_header
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 st.set_page_config(
     page_title="Sage Backtesting Engine",
@@ -223,7 +233,7 @@ if has_errors:
     st.sidebar.button(
         "🚀 Run Backtest",
         type="primary",
-        use_container_width=True,
+        width='stretch',
         disabled=True,
         help="Fix validation errors before running"
     )
@@ -232,7 +242,7 @@ else:
     run_clicked = st.sidebar.button(
         "🚀 Run Backtest",
         type="primary",
-        use_container_width=True,
+        width='stretch',
         help="Run backtest with current parameters"
     )
 
@@ -257,7 +267,7 @@ with st.sidebar.expander("⚙️ Advanced Settings", expanded=False):
     # Clear cache button
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("🗑️ Clear Cache", help="Clear all cached market data", use_container_width=True):
+        if st.button("🗑️ Clear Cache", help="Clear all cached market data", width='stretch'):
             deleted = clear_cache()
             if deleted > 0:
                 st.success(f"Deleted {deleted} cache file(s)")
@@ -265,7 +275,7 @@ with st.sidebar.expander("⚙️ Advanced Settings", expanded=False):
                 st.info("Cache was already empty")
     
     with col2:
-        if st.button("🔄 Refresh", help="Refresh cache statistics", use_container_width=True):
+        if st.button("🔄 Refresh", help="Refresh cache statistics", width='stretch'):
             st.rerun()
     
     st.markdown("---")
@@ -320,7 +330,7 @@ if not has_errors and run_clicked:
     
     from sage_core.walkforward.engine import run_system_walkforward
     
-    with st.spinner("🔄 Running backtest... This may take a moment."):
+    with st.spinner("Running backtest... This may take a moment."):
         try:
             results = run_system_walkforward(
                 universe=list(universe),
@@ -401,6 +411,8 @@ if st.session_state.backtest_error:
 elif st.session_state.backtest_results is not None:
     results = st.session_state.backtest_results
     metrics = results["metrics"]
+    warmup_info = results.get("warmup_info", {})
+    warmup_days = warmup_info.get("total_days", 0)
     
     # Import formatters
     from app.utils.formatters import (
@@ -410,7 +422,46 @@ elif st.session_state.backtest_results is not None:
         format_date,
     )
     
-    st.success("✅ Backtest completed successfully!")
+    # Success message with warmup info
+    st.success(f"✅ Backtest completed successfully! (Warmup: {warmup_info.get('total_trading_days', 0)} trading days)")
+    
+    # Optional: Add info box explaining warmup
+    with st.expander("ℹ️ About Warmup Period", expanded=False):
+        components = warmup_info.get("components", {})
+        total_trading = warmup_info.get("total_trading_days", 0)
+        
+        st.markdown(f"""
+        **Warmup Period:** {total_trading} trading days
+        
+        {warmup_info.get("description", "N/A")}
+        
+        **Sequential Breakdown:**
+        1. **Inverse Vol Warmup:** {components.get('inverse_vol', 0)} days
+           - Needed to calculate first weights
+        2. **First Portfolio Return:** {components.get('first_return', 1)} day
+           - Day when first weights are applied
+        3. **Vol Targeting Warmup:** {components.get('vol_targeting', 0)} days  
+           - Needed to accumulate portfolio returns for vol targeting
+        
+        **Total:** {total_trading} trading days (system fully active after this)
+        
+        **During warmup:**
+        - Data is loaded but not included in final results
+        - Portfolio uses 1.0x leverage (no vol targeting)
+        - Equity curve starts exactly at your specified start date
+        
+        **Why sequential?**
+        We need weights before we can calculate portfolio returns, and we need 
+        portfolio returns before we can apply vol targeting. This is why warmup 
+        periods are additive, not overlapping.
+        
+        **How we load data:**
+        The system goes back {total_trading} business days from your start date,
+        automatically accounting for weekends and holidays.
+        """)
+
+
+
     
     # Import chart utilities
     from app.utils.charts import (
@@ -685,7 +736,7 @@ elif st.session_state.backtest_results is not None:
             # Display as interactive table
             st.dataframe(
                 display_df,
-                use_container_width=True,
+                width='stretch',
                 hide_index=True,
             )
                         

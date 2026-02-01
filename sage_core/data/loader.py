@@ -74,7 +74,7 @@ def load_universe(
         >>> data = load_universe(["SPY", "QQQ"], "2020-01-01", "2020-12-31", use_real_data=False)
     """
     # Validate inputs
-    if not universe:
+    if not universe or len(universe) == 0:
         raise ValueError("Universe cannot be empty")
     
     validate_date_format(start_date)

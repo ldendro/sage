@@ -1,17 +1,8 @@
-"""
-Walkforward backtesting engine.
-
-This module orchestrates the complete backtesting pipeline:
-1. Load data
-2. Run strategy
-3. Compute allocations
-4. Apply risk caps
-5. Apply volatility targeting
-6. Calculate metrics
-"""
+"""Walkforward backtesting engine."""
 
 import pandas as pd
 import numpy as np
+import logging
 from typing import Dict, Any, Optional
 
 from sage_core.data.loader import load_universe
@@ -22,6 +13,10 @@ from sage_core.portfolio.risk_caps import apply_all_risk_caps
 from sage_core.portfolio.vol_targeting import apply_vol_targeting
 from sage_core.metrics.performance import calculate_all_metrics
 from sage_core.utils.constants import SECTOR_MAP
+from sage_core.utils.trading_calendar import get_warmup_start_date, get_first_trading_day_on_or_after
+from sage_core.utils.warmup import calculate_warmup_period
+
+logger = logging.getLogger(__name__)
 
 
 def run_system_walkforward(
@@ -75,6 +70,8 @@ def run_system_walkforward(
             - raw_weights: Pre-vol-targeting weights (post-risk-caps, pre-leverage)
             - metrics: Performance metrics dictionary
             - asset_returns: Asset returns DataFrame
+            - warmup_info: Warmup period breakdown
+            - warmup_start_date: Actual start date for data loading
     
     Example:
         >>> result = run_system_walkforward(
@@ -84,14 +81,34 @@ def run_system_walkforward(
         ... )
         >>> print(f"Sharpe: {result['metrics']['sharpe_ratio']:.2f}")
     """
-    # Validate inputs
-    if not universe or len(universe) == 0:
-        raise ValueError("universe cannot be empty")
+    # Calculate warmup period using centralized function
+    warmup_info = calculate_warmup_period(
+        vol_window=vol_window,
+        vol_lookback=vol_lookback,
+    )
+    warmup_trading_days = warmup_info["total_trading_days"]
     
-    # Step 1: Load data
+    logger.info(f"Warmup period: {warmup_trading_days} trading days ({warmup_info['description']})")
+    
+    # Get first trading day on or after user's start_date
+    # (in case they specified a weekend/holiday)
+    actual_start_date = get_first_trading_day_on_or_after(start_date)
+    if actual_start_date != start_date:
+        logger.info(f"Adjusted start_date from {start_date} to {actual_start_date} (first trading day)")
+    
+    # Calculate exact warmup start date using NYSE trading calendar
+    # This goes back exactly warmup_trading_days from actual_start_date
+    warmup_start_date = get_warmup_start_date(
+        start_date=actual_start_date,
+        warmup_trading_days=warmup_trading_days,
+    )
+    
+    logger.info(f"Loading data from {warmup_start_date} to {end_date}")
+    
+    # Step 1: Load data including warmup period
     ohlcv_data = load_universe(
         universe=universe,
-        start_date=start_date,
+        start_date=warmup_start_date,  # Load extra data for warmup
         end_date=end_date,
     )
     
@@ -164,15 +181,24 @@ def run_system_walkforward(
         weights_wide=final_weights,
     )
     
-    # Drop warmup period rows
-    # IMPORTANT: We filter on weights, not returns!
-    # build_portfolio_raw_returns uses sum(skipna=True), so NaN weights → 0.0 returns
-    # If we filtered on returns.dropna(), warmup period wouldn't be dropped
-    # This would bias volatility, Sharpe, turnover, and equity curve length
+    # Slice results to start at actual_start_date (first trading day on or after user's start_date)
+    # This ensures equity curve starts exactly at the first trading day
+    # All warmup period data is excluded from final results
     
-    # Drop rows where any weight is NaN (warmup period)
-    valid_weight_mask = ~final_weights.isna().any(axis=1)
-    clean_index = final_weights.index[valid_weight_mask]
+    # Use actual_start_date (which is the first trading day on or after user's start_date)
+    start_date_ts = pd.Timestamp(actual_start_date)
+    
+    # Filter all outputs to start at actual_start_date
+    valid_mask = final_weights.index >= start_date_ts
+    clean_index = final_weights.index[valid_mask]
+    
+    if len(clean_index) == 0:
+        raise ValueError(
+            f"No data available at or after start_date {actual_start_date}. "
+            f"First available date is {final_weights.index[0].strftime('%Y-%m-%d')}."
+        )
+    
+    logger.info(f"Results start at {clean_index[0].strftime('%Y-%m-%d')} (user requested {start_date})")
     
     # Apply to all outputs to ensure alignment
     final_portfolio_returns_clean = final_portfolio_returns.loc[clean_index]
@@ -205,4 +231,6 @@ def run_system_walkforward(
         "raw_weights": capped_weights_clean,  # Pre-vol-targeting weights
         "metrics": metrics,
         "asset_returns": asset_returns_clean,
+        "warmup_info": warmup_info,  # Warmup period breakdown
+        "warmup_start_date": warmup_start_date,  # Actual start date for data loading
     }
