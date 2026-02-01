@@ -240,3 +240,27 @@ def sector_map():
 def default_meta_params():
     """Return default hard meta parameters for testing."""
     return constants.DEFAULT_HARD_META_PARAMS.copy()
+
+
+# ============================================================================
+# Warmup Helper Functions
+# ============================================================================
+
+def get_warmup_period(vol_window: int, vol_lookback: int) -> int:
+    """
+    Helper to calculate warmup period for tests.
+    
+    Args:
+        vol_window: Volatility window for inverse vol allocator
+        vol_lookback: Lookback period for vol targeting
+    
+    Returns:
+        Total warmup period in trading days
+    
+    Example:
+        >>> warmup_days = get_warmup_period(vol_window=20, vol_lookback=60)
+        >>> weights_after_warmup = weights.iloc[warmup_days:]
+    """
+    from sage_core.utils.warmup import calculate_warmup_period
+    return calculate_warmup_period(vol_window, vol_lookback)["total_trading_days"]
+

@@ -188,7 +188,7 @@ def run_system_walkforward(
     # Use actual_start_date (which is the first trading day on or after user's start_date)
     start_date_ts = pd.Timestamp(actual_start_date)
     
-    # Filter all outputs to start at actual_start_date
+    # Step 1: Filter by date - remove warmup period
     valid_mask = final_weights.index >= start_date_ts
     clean_index = final_weights.index[valid_mask]
     
@@ -200,12 +200,36 @@ def run_system_walkforward(
     
     logger.info(f"Results start at {clean_index[0].strftime('%Y-%m-%d')} (user requested {start_date})")
     
-    # Apply to all outputs to ensure alignment
-    final_portfolio_returns_clean = final_portfolio_returns.loc[clean_index]
-    final_weights_clean = final_weights.loc[clean_index]
-    vol_targeted_weights_clean = vol_targeted_weights.loc[clean_index]  # Pre-cap weights
-    asset_returns_clean = asset_returns.loc[clean_index]
-    capped_weights_clean = capped_weights.loc[clean_index]
+    # Apply date filter to all outputs
+    final_portfolio_returns_filtered = final_portfolio_returns.loc[clean_index]
+    final_weights_filtered = final_weights.loc[clean_index]
+    vol_targeted_weights_filtered = vol_targeted_weights.loc[clean_index]
+    asset_returns_filtered = asset_returns.loc[clean_index]
+    capped_weights_filtered = capped_weights.loc[clean_index]
+    
+    # Step 2: Filter out rows with NaN weights
+    # This handles IPOs, delisted stocks, or data gaps that can appear after start_date
+    # Drop rows where ANY weight is NaN (incomplete data for that day)
+    nan_mask = ~final_weights_filtered.isna().any(axis=1)
+    clean_index_no_nan = final_weights_filtered.index[nan_mask]
+    
+    if len(clean_index_no_nan) == 0:
+        raise ValueError(
+            f"No valid data after filtering NaN weights. "
+            f"All rows after {actual_start_date} have missing data. "
+            f"Check that all tickers in universe have data for the requested period."
+        )
+    
+    rows_dropped = len(clean_index) - len(clean_index_no_nan)
+    if rows_dropped > 0:
+        logger.info(f"Dropped {rows_dropped} rows with NaN weights (IPOs, delisted stocks, or data gaps)")
+    
+    # Apply NaN filter to all outputs to ensure alignment
+    final_portfolio_returns_clean = final_portfolio_returns_filtered.loc[clean_index_no_nan]
+    final_weights_clean = final_weights_filtered.loc[clean_index_no_nan]
+    vol_targeted_weights_clean = vol_targeted_weights_filtered.loc[clean_index_no_nan]
+    asset_returns_clean = asset_returns_filtered.loc[clean_index_no_nan]
+    capped_weights_clean = capped_weights_filtered.loc[clean_index_no_nan]
     
     # Step 9: Build equity curve (starting at 100)
     equity_curve = (1 + final_portfolio_returns_clean).cumprod() * 100

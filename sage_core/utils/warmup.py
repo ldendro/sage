@@ -28,7 +28,7 @@ def calculate_warmup_period(
     
     Total warmup = vol_window + 1 + vol_lookback (in TRADING DAYS)
     
-    Note: The engine uses pd.offsets.BDay() to go back this many business days,
+    Note: The engine uses pandas market calendars to go back this many business days,
     automatically accounting for weekends and holidays.
     
     Future components will be added here as the system evolves.

@@ -92,7 +92,7 @@ def get_warmup_start_date(
             raise ValueError(
                 f"Insufficient trading days available. "
                 f"Need {warmup_trading_days} trading days before {start_date}, "
-                f"but only {available_days} available in NYSE calendar. "
+                f"but only {available_days} available in {exchange} calendar. "
                 f"Earliest available: {trading_days_before[0].strftime('%Y-%m-%d')}. "
                 f"Try a later start_date or reduce vol_window/vol_lookback."
             )
@@ -102,7 +102,7 @@ def get_warmup_start_date(
     
     logger.info(
         f"Warmup start date: {warmup_start_date.strftime('%Y-%m-%d')} "
-        f"({warmup_trading_days} NYSE trading days before {start_date})"
+        f"({warmup_trading_days} {exchange} trading days before {start_date})"
     )
     
     return warmup_start_date.strftime("%Y-%m-%d")
