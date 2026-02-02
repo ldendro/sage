@@ -129,6 +129,29 @@ with st.sidebar.expander("Allocator Settings", expanded=False):
 
 # ==================== RISK CAPS ====================
 with st.sidebar.expander("Risk Caps", expanded=False):
+    # Cap Mode Selector
+    st.markdown("**Risk Cap Enforcement Mode**")
+    cap_mode = st.radio(
+        "When to apply risk caps:",
+        options=["both", "pre_leverage", "post_leverage"],
+        index=0,  # Default to "both"
+        help="Controls when risk caps are enforced relative to volatility targeting",
+        format_func=lambda x: {
+            "both": "Both (Before & After Leverage) - Most Conservative",
+            "pre_leverage": "Pre-Leverage Only (Caps before vol targeting)",
+            "post_leverage": "Post-Leverage Only (Caps after vol targeting)"
+        }[x]
+    )
+    
+    # Show explanation based on selected mode
+    if cap_mode == "both":
+        st.info("ℹ️ Caps applied before and after vol targeting. Most conservative - ensures limits never violated.")
+    elif cap_mode == "pre_leverage":
+        st.warning("⚠️ Caps only before leverage. Final weights may exceed caps (e.g., 25% → 50% at 2× leverage).")
+    else:  # post_leverage
+        st.warning("⚠️ Caps only after leverage. Pre-leverage weights may exceed caps before scaling.")
+        
+    # Risk Cap Parameters
     max_weight_per_asset = st.slider(
         "Max Weight per Asset",
         min_value=BOUNDS["max_weight_per_asset"][0],
@@ -321,6 +344,7 @@ if not has_errors and run_clicked:
         "max_weight_per_asset": max_weight_per_asset,
         "max_sector_weight": max_sector_weight,
         "min_assets_held": min_assets_held,
+        "cap_mode": cap_mode,
         "target_vol": target_vol,
         "vol_lookback": vol_lookback,
         "min_leverage": min_leverage,
@@ -339,6 +363,7 @@ if not has_errors and run_clicked:
                 max_weight_per_asset=max_weight_per_asset,
                 max_sector_weight=max_sector_weight,
                 min_assets_held=min_assets_held,
+                cap_mode=cap_mode,
                 target_vol=target_vol,
                 vol_lookback=vol_lookback,
                 min_leverage=min_leverage,
