@@ -412,7 +412,6 @@ elif st.session_state.backtest_results is not None:
     results = st.session_state.backtest_results
     metrics = results["metrics"]
     warmup_info = results.get("warmup_info", {})
-    warmup_days = warmup_info.get("total_days", 0)
     
     # Import formatters
     from app.utils.formatters import (
