@@ -27,6 +27,7 @@ def run_system_walkforward(
     max_weight_per_asset: float = 0.25,
     max_sector_weight: Optional[float] = None,
     min_assets_held: int = 1,
+    cap_mode: str = "both",
     # Vol targeting
     target_vol: float = 0.10,
     vol_lookback: int = 60,
@@ -55,6 +56,10 @@ def run_system_walkforward(
         max_weight_per_asset: Maximum weight per asset (default: 0.25)
         max_sector_weight: Maximum weight per sector (default: None)
         min_assets_held: Minimum number of assets (default: 1)
+        cap_mode: When to apply risk caps (default: "both")
+            - "both": Apply caps before and after vol targeting (most conservative)
+            - "pre_leverage": Apply caps only before vol targeting
+            - "post_leverage": Apply caps only after vol targeting
         target_vol: Target annual volatility (default: 0.10)
         vol_lookback: Lookback for vol targeting (default: 60)
         min_leverage: Minimum leverage (default: 0.0)
@@ -118,20 +123,32 @@ def run_system_walkforward(
     # Step 3: Align asset returns (uses meta_raw_ret from strategy)
     asset_returns = align_asset_returns(asset_data=strategy_data)
     
+    # Validate cap_mode
+    valid_cap_modes = ["both", "pre_leverage", "post_leverage"]
+    if cap_mode not in valid_cap_modes:
+        raise ValueError(
+            f"Invalid cap_mode: {cap_mode}. Must be one of {valid_cap_modes}"
+        )
+    
     # Step 4: Compute allocations (inverse vol)
     allocated_weights = compute_inverse_vol_weights(
         returns_wide=asset_returns,
         lookback=vol_window,
     )
     
-    # Step 5: Apply risk caps
-    capped_weights = apply_all_risk_caps(
-        weights_df=allocated_weights,
-        sector_map=SECTOR_MAP,
-        max_weight_per_asset=max_weight_per_asset,
-        max_sector_weight=max_sector_weight,
-        min_assets_held=min_assets_held,
-    )
+    # Step 5: Apply risk caps (pre-leverage)
+    if cap_mode in ["pre_leverage", "both"]:
+        logger.info(f"Applying pre-leverage risk caps (mode: {cap_mode})")
+        capped_weights = apply_all_risk_caps(
+            weights_df=allocated_weights,
+            sector_map=SECTOR_MAP,
+            max_weight_per_asset=max_weight_per_asset,
+            max_sector_weight=max_sector_weight,
+            min_assets_held=min_assets_held,
+        )
+    else:
+        logger.info(f"Skipping pre-leverage risk caps (mode: {cap_mode})")
+        capped_weights = allocated_weights
     
     # Step 6: Build portfolio returns (before vol targeting)
     raw_portfolio_returns = build_portfolio_raw_returns(
@@ -159,21 +176,22 @@ def run_system_walkforward(
         max_leverage=max_leverage,
     )
     
-    # Step 7b: Reapply risk caps after vol targeting
+    # Step 7b: Reapply risk caps after vol targeting (post-leverage)
     # CRITICAL: Vol targeting scales weights by leverage (can be >1.0)
     # This means a 0.25 cap becomes 0.50 at 2× leverage, violating limits
     # We reapply caps to ensure absolute exposure limits are always respected
-    # TODO (Phase 2+): Make this configurable via cap_enforcement_mode parameter
-    #   - "post_leverage": Current behavior (caps apply to final portfolio)
-    #   - "pre_leverage": Caps apply before leverage (current violation)
-    #   - "leverage_aware": Constrain leverage to respect caps
-    final_weights = apply_all_risk_caps(
-        weights_df=vol_targeted_weights,
-        sector_map=SECTOR_MAP,
-        max_weight_per_asset=max_weight_per_asset,
-        max_sector_weight=max_sector_weight,
-        min_assets_held=min_assets_held,
-    )
+    if cap_mode in ["post_leverage", "both"]:
+        logger.info(f"Applying post-leverage risk caps (mode: {cap_mode})")
+        final_weights = apply_all_risk_caps(
+            weights_df=vol_targeted_weights,
+            sector_map=SECTOR_MAP,
+            max_weight_per_asset=max_weight_per_asset,
+            max_sector_weight=max_sector_weight,
+            min_assets_held=min_assets_held,
+        )
+    else:
+        logger.info(f"Skipping post-leverage risk caps (mode: {cap_mode})")
+        final_weights = vol_targeted_weights
     
     # Step 8: Build final portfolio returns (with post-leverage caps applied)
     final_portfolio_returns = build_portfolio_raw_returns(
