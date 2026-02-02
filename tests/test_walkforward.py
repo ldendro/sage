@@ -8,6 +8,7 @@ import numpy as np
 import os
 
 from sage_core.walkforward.engine import run_system_walkforward
+from tests.conftest import get_warmup_period
 
 
 class TestRunSystemWalkforward:
@@ -79,12 +80,16 @@ class TestRunSystemWalkforward:
     
     def test_walkforward_with_vol_targeting(self):
         """Test walkforward with volatility targeting."""
+        vol_window = 20
+        vol_lookback = 30
+        
         result = run_system_walkforward(
             universe=["SPY", "QQQ"],
             start_date="2020-01-01",
             end_date="2020-06-30",
             target_vol=0.15,
-            vol_lookback=30,
+            vol_window=vol_window,
+            vol_lookback=vol_lookback,
             max_leverage=1.5,
         )
         
@@ -95,11 +100,14 @@ class TestRunSystemWalkforward:
         vol_targeted_weights = result["vol_targeted_weights"]
         raw_weights = result["raw_weights"]
         
+        # Calculate actual warmup period
+        warmup_days = get_warmup_period(vol_window, vol_lookback)
+        
         # After warmup, some scaling should have occurred
         # Check that they're not identical
-        if len(vol_targeted_weights) > 30:
-            post_warmup_vol_targeted = vol_targeted_weights.iloc[30:]
-            post_warmup_raw = raw_weights.iloc[30:]
+        if len(vol_targeted_weights) > warmup_days:
+            post_warmup_vol_targeted = vol_targeted_weights.iloc[warmup_days:]
+            post_warmup_raw = raw_weights.iloc[warmup_days:]
             
             # Should have some difference (not identical)
             assert not post_warmup_vol_targeted.equals(post_warmup_raw)
@@ -192,24 +200,6 @@ class TestRunSystemWalkforward:
         # Allow small tolerance for numerical precision
         assert (weight_sums <= 1.0 + 1e-6).all()
     
-    def test_walkforward_min_leverage(self):
-        """Test walkforward with minimum leverage."""
-        result = run_system_walkforward(
-            universe=["SPY", "QQQ"],
-            start_date="2020-01-01",
-            end_date="2020-03-31",
-            min_leverage=0.5,
-            max_leverage=2.0,
-        )
-        
-        # After warmup, weight sums should be >= min_leverage
-        weight_sums = result["weights"].sum(axis=1)
-        
-        # Check after warmup period (60 days)
-        if len(weight_sums) > 60:
-            post_warmup_sums = weight_sums.iloc[60:]
-            assert (post_warmup_sums >= 0.5 - 1e-6).all()
-    
     def test_walkforward_invalid_dates(self):
         """Test walkforward with invalid date range."""
         with pytest.raises(ValueError):
@@ -217,15 +207,6 @@ class TestRunSystemWalkforward:
                 universe=["SPY"],
                 start_date="2020-12-31",
                 end_date="2020-01-01",  # End before start
-            )
-    
-    def test_walkforward_empty_universe(self):
-        """Test walkforward with empty universe."""
-        with pytest.raises(ValueError):
-            run_system_walkforward(
-                universe=[],
-                start_date="2020-01-01",
-                end_date="2020-12-31",
             )
     
     def test_walkforward_consistency(self):

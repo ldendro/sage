@@ -269,7 +269,7 @@ Similar process to strategies. See `docs/ARCHITECTURE.md` for allocator interfac
 ### Running the Streamlit App
 
 ```bash
-streamlit run sage_viz/app.py
+streamlit run app/streamlit_app.py
 ```
 
 ### Generating Sample Data
