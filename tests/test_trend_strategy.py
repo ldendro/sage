@@ -104,6 +104,36 @@ class TestTrendStrategyInitialization:
                 "combination_method": "weighted",
                 "weights": [0.5, 0.3, 0.3]
             })
+    
+    def test_trend_param_validation_weighted_threshold(self):
+        """Test parameter validation for weighted_threshold."""
+        # Invalid type
+        with pytest.raises(ValueError, match="weighted_threshold must be a number"):
+            TrendStrategy(params={
+                "combination_method": "weighted",
+                "weighted_threshold": "invalid"
+            })
+        
+        # Too small
+        with pytest.raises(ValueError, match="weighted_threshold must be in"):
+            TrendStrategy(params={
+                "combination_method": "weighted",
+                "weighted_threshold": -0.1
+            })
+        
+        # Too large
+        with pytest.raises(ValueError, match="weighted_threshold must be in"):
+            TrendStrategy(params={
+                "combination_method": "weighted",
+                "weighted_threshold": 1.5
+            })
+        
+        # Valid values should work
+        strategy = TrendStrategy(params={
+            "combination_method": "weighted",
+            "weighted_threshold": 0.05
+        })
+        assert strategy.params["weighted_threshold"] == 0.05
 
 
 class TestTrendStrategyWarmup:
@@ -307,6 +337,41 @@ class TestTrendStrategyCombination:
         combined = strategy.combine_signals(mom_sig, ma_sig, breakout_sig)
         
         assert (combined == 1).all()
+    
+    def test_combine_signals_weighted_threshold_configurable(self):
+        """Test that weighted_threshold is configurable and affects signals."""
+        dates = pd.date_range('2020-01-01', periods=10)
+        
+        # Weighted sum = 0.05 (below default 0.1, above 0.01)
+        # weights = [0.4, 0.3, 0.3]
+        # 1*0.4 + (-1)*0.3 + (-1)*0.3 = 0.4 - 0.6 = -0.2... wait let me recalculate
+        # Actually: 1*0.4 + 0*0.3 + 0*0.3 = 0.4 (too high)
+        # Let's use: 1*0.4 + (-1)*0.3 + 0*0.3 = 0.1 (exactly at threshold)
+        # Better: Use different weights to get exactly 0.05
+        
+        mom_sig = pd.Series([1, 1, 1, 1, 1, 1, 1, 1, 1, 1], index=dates)
+        ma_sig = pd.Series([0, 0, 0, 0, 0, 0, 0, 0, 0, 0], index=dates)
+        breakout_sig = pd.Series([-1, -1, -1, -1, -1, -1, -1, -1, -1, -1], index=dates)
+        
+        # With weights [0.35, 0.3, 0.35]: 1*0.35 + 0*0.3 + (-1)*0.35 = 0
+        # Let's use [0.4, 0.3, 0.3]: 1*0.4 + 0*0.3 + (-1)*0.3 = 0.1
+        # With threshold 0.15 → neutral (0.1 < 0.15)
+        strategy_high_threshold = TrendStrategy(params={
+            "combination_method": "weighted",
+            "weights": [0.4, 0.3, 0.3],
+            "weighted_threshold": 0.15
+        })
+        combined = strategy_high_threshold.combine_signals(mom_sig, ma_sig, breakout_sig)
+        assert (combined == 0).all()  # Below threshold → neutral
+        
+        # With threshold 0.05 → long (0.1 > 0.05)
+        strategy_low_threshold = TrendStrategy(params={
+            "combination_method": "weighted",
+            "weights": [0.4, 0.3, 0.3],
+            "weighted_threshold": 0.05
+        })
+        combined = strategy_low_threshold.combine_signals(mom_sig, ma_sig, breakout_sig)
+        assert (combined == 1).all()  # Above threshold → long
 
 
 class TestTrendStrategyIntegration:

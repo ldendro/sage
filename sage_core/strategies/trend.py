@@ -29,11 +29,17 @@ class TrendStrategy(Strategy):
         sma_long: Long SMA period (default: 200)
         breakout_period: Days for breakout calculation (default: 252)
         combination_method: How to combine signals (default: "majority")
-            - "majority": At least 2 of 3 agree
+            - "majority": At least 2 of 3 agree (strong majority, no conflicts)
             - "all": All 3 must agree
             - "weighted": Weighted average (weights configurable)
         weights: Signal weights for weighted method (default: [0.4, 0.3, 0.3])
             - [momentum_weight, ma_weight, breakout_weight]
+        weighted_threshold: Threshold for weighted method (default: 0.1)
+            - Long if weighted_sum > threshold
+            - Short if weighted_sum < -threshold
+            - Neutral otherwise
+            - Lower threshold = more aggressive (more trades)
+            - Higher threshold = more conservative (fewer trades)
     
     Example:
         >>> # Default (majority voting)
@@ -47,6 +53,13 @@ class TrendStrategy(Strategy):
         ...     "combination_method": "weighted",
         ...     "weights": [0.6, 0.2, 0.2]
         ... })
+        >>> 
+        >>> # Aggressive weighted (lower threshold)
+        >>> strategy = TrendStrategy(params={
+        ...     "combination_method": "weighted",
+        ...     "weights": [0.4, 0.3, 0.3],
+        ...     "weighted_threshold": 0.01  # Very sensitive
+        ... })
     """
     
     # Default parameters
@@ -57,6 +70,7 @@ class TrendStrategy(Strategy):
         "breakout_period": 252,
         "combination_method": "majority",
         "weights": [0.4, 0.3, 0.3],  # [momentum, ma, breakout]
+        "weighted_threshold": 0.1,  # Threshold for weighted method
     }
     
     def __init__(self, params: Dict[str, Any] = None):
@@ -128,6 +142,13 @@ class TrendStrategy(Strategy):
             
             if abs(sum(weights) - 1.0) > 1e-6:
                 raise ValueError(f"weights must sum to 1.0, got sum={sum(weights)}")
+            
+            # Validate weighted_threshold
+            threshold = self.params["weighted_threshold"]
+            if not isinstance(threshold, (int, float)):
+                raise ValueError(f"weighted_threshold must be a number, got {threshold}")
+            if threshold < 0 or threshold > 1:
+                raise ValueError(f"weighted_threshold must be in [0, 1], got {threshold}")
     
     def get_warmup_period(self) -> int:
         """
@@ -267,16 +288,18 @@ class TrendStrategy(Strategy):
             combined[all_short] = -1
             
         elif method == "majority":
-            # At least 2 of 3 must agree
+            # Strong majority: at least 2 of 3 agree, no conflicts
+            # Treats 2 vs 1 conflicts as neutral (conservative)
             signal_sum = momentum_sig + ma_sig + breakout_sig
             
             combined = pd.Series(0, index=momentum_sig.index, dtype=int)
-            combined[signal_sum >= 2] = 1    # At least 2 long signals
-            combined[signal_sum <= -2] = -1  # At least 2 short signals
+            combined[signal_sum >= 2] = 1    # At least 2 long, 0 or 1 neutral
+            combined[signal_sum <= -2] = -1  # At least 2 short, 0 or 1 neutral
             
         else:  # weighted
-            # Weighted average of signals
+            # Weighted average of signals with configurable threshold
             weights = self.params["weights"]
+            threshold = self.params["weighted_threshold"]
             
             weighted_sum = (
                 weights[0] * momentum_sig +
@@ -285,8 +308,8 @@ class TrendStrategy(Strategy):
             )
             
             combined = pd.Series(0, index=momentum_sig.index, dtype=int)
-            combined[weighted_sum > 0.1] = 1    # Threshold for long
-            combined[weighted_sum < -0.1] = -1  # Threshold for short
+            combined[weighted_sum > threshold] = 1    # Long if above threshold
+            combined[weighted_sum < -threshold] = -1  # Short if below -threshold
         
         return combined
     
