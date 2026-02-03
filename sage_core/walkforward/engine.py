@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from sage_core.data.loader import load_universe
-from sage_core.strategies.passthrough_v1 import run_passthrough_v1
+from sage_core.strategies.passthrough_v1 import PassthroughStrategy
 from sage_core.allocators.inverse_vol_v1 import compute_inverse_vol_weights
 from sage_core.portfolio.constructor import align_asset_returns, build_portfolio_raw_returns
 from sage_core.portfolio.risk_caps import apply_all_risk_caps
@@ -87,9 +87,13 @@ def run_system_walkforward(
         >>> print(f"Sharpe: {result['metrics']['sharpe_ratio']:.2f}")
     """
     # Calculate warmup period using centralized function
+    # For now, strategy_warmup=0 since we only have Passthrough (no warmup needed)
+    # In Steps 3B.2/3B.3, this will be dynamic based on selected strategy
+    strategy_warmup = 0  # Passthrough has 0 warmup
     warmup_info = calculate_warmup_period(
         vol_window=vol_window,
         vol_lookback=vol_lookback,
+        strategy_warmup=strategy_warmup,
     )
     warmup_trading_days = warmup_info["total_trading_days"]
     
@@ -118,7 +122,7 @@ def run_system_walkforward(
     )
     
     # Step 2: Run strategy (adds meta_raw_ret column to each DataFrame)
-    strategy_data = run_passthrough_v1(ohlcv_data)
+    strategy_data = PassthroughStrategy().run(ohlcv_data)
     
     # Step 3: Align asset returns (uses meta_raw_ret from strategy)
     asset_returns = align_asset_returns(asset_data=strategy_data)
