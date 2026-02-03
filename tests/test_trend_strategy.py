@@ -406,3 +406,43 @@ class TestTrendStrategyEdgeCases:
         
         assert len(signals) == 300
         assert len(meta_returns) == 300
+    
+    def test_breakout_signal_narrow_range_overlap(self):
+        """Test breakout signal when range is narrow (both high and low bands overlap)."""
+        dates = pd.date_range('2020-01-01', periods=300)
+        
+        # Create narrow range: prices oscillate in tiny range
+        # After warmup, range will be very narrow (99.9 to 100.1)
+        prices = [100] * 252  # Warmup period
+        prices.extend([100 + 0.05 * np.sin(i / 10) for i in range(48)])  # Tiny oscillation
+        
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = TrendStrategy(params={"breakout_period": 252})
+        signals = strategy.calculate_breakout_signal(ohlcv)
+        
+        # In the narrow range period (after warmup), signals should be neutral (0)
+        # because both high and low conditions will be true
+        narrow_range_signals = signals.iloc[-20:]  # Last 20 days
+        
+        # Most or all should be neutral (0) due to overlap
+        neutral_count = (narrow_range_signals == 0).sum()
+        assert neutral_count >= 15  # At least 75% neutral in narrow range
+    
+    def test_breakout_signal_no_overlap_in_trending_market(self):
+        """Test that breakout signal works normally when range is not narrow."""
+        dates = pd.date_range('2020-01-01', periods=300)
+        
+        # Strong uptrend - no overlap expected
+        prices = np.linspace(100, 150, 300)
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = TrendStrategy(params={"breakout_period": 252})
+        signals = strategy.calculate_breakout_signal(ohlcv)
+        
+        # In uptrend, should be mostly long (1), not neutral
+        trending_signals = signals.iloc[-50:]
+        long_count = (trending_signals == 1).sum()
+        
+        # Should have many long signals in uptrend
+        assert long_count >= 40  # At least 80% long

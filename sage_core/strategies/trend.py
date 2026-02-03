@@ -200,6 +200,9 @@ class TrendStrategy(Strategy):
         
         Signal: 1 if at 52-week high, -1 if at 52-week low, 0 otherwise
         
+        When both high and low conditions are true (narrow range), signal is neutral.
+        This prevents bias in sideways/low-volatility markets.
+        
         Args:
             ohlcv: DataFrame with OHLCV data
         
@@ -217,11 +220,17 @@ class TrendStrategy(Strategy):
         
         # At or near high (within 1%)
         at_high = ohlcv['close'] >= rolling_high * 0.99
-        signals[at_high] = 1
         
         # At or near low (within 1%)
         at_low = ohlcv['close'] <= rolling_low * 1.01
-        signals[at_low] = -1
+        
+        # Check for overlap (both conditions true = narrow range)
+        overlap = at_high & at_low
+        
+        # Apply signals with overlap handling
+        signals[at_high & ~overlap] = 1   # Long only if not overlapping
+        signals[at_low & ~overlap] = -1   # Short only if not overlapping
+        signals[overlap] = 0              # Neutral when both true (sideways market)
         
         return signals
     
