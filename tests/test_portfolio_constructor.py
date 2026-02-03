@@ -11,7 +11,7 @@ from sage_core.portfolio.constructor import (
     build_portfolio_raw_returns,
 )
 from sage_core.data.loader import load_universe
-from sage_core.strategies.passthrough_v1 import run_passthrough_v1
+from sage_core.strategies.passthrough_v1 import PassthroughStrategy
 
 
 class TestAlignAssetReturns:
@@ -25,7 +25,7 @@ class TestAlignAssetReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         
         # Align returns
         returns_wide = align_asset_returns(strategy_output)
@@ -47,7 +47,7 @@ class TestAlignAssetReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         
         returns_wide = align_asset_returns(strategy_output)
         
@@ -94,7 +94,7 @@ class TestAlignAssetReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         
         returns_wide = align_asset_returns(strategy_output)
         
@@ -113,7 +113,7 @@ class TestBuildPortfolioRawReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         returns_wide = align_asset_returns(strategy_output)
         
         # Create equal weights (50/50)
@@ -142,7 +142,7 @@ class TestBuildPortfolioRawReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         returns_wide = align_asset_returns(strategy_output)
         
         # 100% SPY, 0% QQQ
@@ -163,7 +163,7 @@ class TestBuildPortfolioRawReturns:
             start_date="2020-01-01",
             end_date="2020-01-10",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         returns_wide = align_asset_returns(strategy_output)
         
         # Create varying weights
@@ -189,7 +189,7 @@ class TestBuildPortfolioRawReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         returns_wide = align_asset_returns(strategy_output)
         
         # Create weights with wrong shape
@@ -209,7 +209,7 @@ class TestBuildPortfolioRawReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         returns_wide = align_asset_returns(strategy_output)
         
         # Create weights with different columns
@@ -229,7 +229,7 @@ class TestBuildPortfolioRawReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = run_passthrough_v1(data)
+        strategy_output = PassthroughStrategy().run(data)
         returns_wide = align_asset_returns(strategy_output)
         
         # Create weights that sum to 1

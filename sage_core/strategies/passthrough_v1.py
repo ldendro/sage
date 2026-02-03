@@ -1,5 +1,5 @@
 """
-Passthrough strategy (v1) - Trivial strategy for testing.
+Passthrough strategy - Trivial strategy for testing.
 
 This strategy simply passes through the raw returns without any signal generation.
 It sets meta_raw_ret = raw_ret for all assets.
@@ -11,44 +11,51 @@ This is useful for:
 """
 
 import pandas as pd
-from typing import Dict
+from typing import Dict, Any
+from sage_core.strategies.base import Strategy
 
 
-def run_passthrough_v1(
-    asset_data: Dict[str, pd.DataFrame],
-    params: Dict = None,
-) -> Dict[str, pd.DataFrame]:
+class PassthroughStrategy(Strategy):
     """
-    Run passthrough strategy on asset data.
+    Passthrough strategy that returns raw asset returns.
     
-    This is the simplest possible strategy: it just copies raw_ret to meta_raw_ret
-    for each asset, effectively creating a buy-and-hold signal.
-    
-    Args:
-        asset_data: Dictionary mapping symbol to DataFrame with OHLCV + raw_ret
-        params: Strategy parameters (unused for passthrough)
-    
-    Returns:
-        Dictionary mapping symbol to DataFrame with added 'meta_raw_ret' column
-    
-    Example:
-        >>> data = load_universe(["SPY", "QQQ"], "2020-01-01", "2020-12-31")
-        >>> result = run_passthrough_v1(data)
-        >>> spy_df = result["SPY"]
-        >>> assert (spy_df['meta_raw_ret'] == spy_df['raw_ret']).all()
+    This is the simplest possible strategy: buy-and-hold with no signals.
+    Useful for testing and baseline comparison.
     """
-    if params is None:
-        params = {}
     
-    result = {}
+    def validate_params(self) -> None:
+        """Passthrough has no parameters to validate."""
+        pass
     
-    for symbol, df in asset_data.items():
-        # Create a copy to avoid modifying original
-        df_copy = df.copy()
+    def get_warmup_period(self) -> int:
+        """
+        Passthrough requires no warmup.
         
-        # Simply copy raw_ret to meta_raw_ret
-        df_copy['meta_raw_ret'] = df_copy['raw_ret']
-        
-        result[symbol] = df_copy
+        Returns:
+            0 (no warmup needed)
+        """
+        return 0
     
-    return result
+    def generate_signals(self, ohlcv: pd.DataFrame) -> pd.Series:
+        """
+        Generate signals (always 1 = long for passthrough).
+        
+        Args:
+            ohlcv: DataFrame with OHLCV data
+        
+        Returns:
+            Series of 1s (always long)
+        """
+        return pd.Series(1, index=ohlcv.index)
+    
+    def calculate_returns(self, ohlcv: pd.DataFrame) -> pd.Series:
+        """
+        Calculate strategy returns (same as raw returns).
+        
+        Args:
+            ohlcv: DataFrame with OHLCV + raw_ret
+        
+        Returns:
+            Series of raw returns (passthrough)
+        """
+        return ohlcv['raw_ret']
