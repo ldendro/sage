@@ -191,8 +191,12 @@ class TestMeanRevStrategyIndicators:
     def test_rsi_signal_overbought(self):
         """Test RSI signal when overbought."""
         dates = pd.date_range('2020-01-01', periods=100)
-        # Create uptrend to get high RSI
-        prices = np.linspace(80, 100, 100)
+        # Create accelerating uptrend to get high RSI (not linear!)
+        # Start flat, then sharp gains
+        prices = [80] * 30 + list(np.linspace(80, 100, 70))
+        # Add some sharp spikes to boost RSI
+        for i in range(50, 70, 5):
+            prices[i] = prices[i] + 2
         ohlcv = pd.DataFrame({'close': prices}, index=dates)
         
         strategy = MeanRevStrategy(params={"rsi_period": 14, "rsi_overbought": 70})
