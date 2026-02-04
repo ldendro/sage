@@ -221,8 +221,8 @@ class MeanRevStrategy(Strategy):
         avg_gain = gain.rolling(window=period).mean()
         avg_loss = loss.rolling(window=period).mean()
         
-        # Calculate RS and RSI
-        rs = avg_gain / avg_loss
+        # Calculate RS and RSI (handle division by zero)
+        rs = avg_gain / avg_loss.replace(0, np.nan)
         rsi = 100 - (100 / (1 + rs))
         
         # Generate signals (contrarian)
