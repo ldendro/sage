@@ -10,7 +10,6 @@ Signals are contrarian: buy oversold, sell overbought.
 """
 
 import pandas as pd
-import numpy as np
 from typing import Dict, Any
 from sage_core.strategies.base import Strategy
 
@@ -221,9 +220,18 @@ class MeanRevStrategy(Strategy):
         avg_gain = gain.rolling(window=period).mean()
         avg_loss = loss.rolling(window=period).mean()
         
-        # Calculate RS and RSI (handle division by zero)
-        rs = avg_gain / avg_loss.replace(0, np.nan)
+        # Calculate RS and RSI
+        # Handle edge cases:
+        # - avg_loss = 0 (sustained uptrend) → RSI = 100 (overbought)
+        # - avg_gain = 0 (sustained downtrend) → RSI = 0 (oversold)
+        # - both = 0 (flat) → RSI = 50 (neutral)
+        rs = avg_gain / avg_loss
         rsi = 100 - (100 / (1 + rs))
+        
+        # Explicitly handle division by zero cases
+        rsi = rsi.where(avg_loss != 0, 100)  # avg_loss=0 → RSI=100
+        rsi = rsi.where(avg_gain != 0, 0)    # avg_gain=0 → RSI=0
+        rsi = rsi.where((avg_gain != 0) | (avg_loss != 0), 50)  # both=0 → RSI=50
         
         # Generate signals (contrarian)
         signals = pd.Series(0, index=ohlcv.index, dtype=int)
@@ -289,8 +297,10 @@ class MeanRevStrategy(Strategy):
         mean = ohlcv['close'].rolling(window=lookback).mean()
         std = ohlcv['close'].rolling(window=lookback).std()
         
-        # Calculate Z-Score (handle division by zero)
-        zscore = (ohlcv['close'] - mean) / std.replace(0, np.nan)
+        # Calculate Z-Score
+        # Handle edge case: std = 0 (flat prices) → zscore = 0 (neutral)
+        zscore = (ohlcv['close'] - mean) / std
+        zscore = zscore.where(std != 0, 0)  # std=0 → zscore=0 (neutral)
         
         # Generate signals (contrarian)
         signals = pd.Series(0, index=ohlcv.index, dtype=int)

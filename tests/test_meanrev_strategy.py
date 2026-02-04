@@ -440,3 +440,88 @@ class TestMeanRevStrategyEdgeCases:
         
         assert len(signals) == 150
         assert len(meta_returns) == 150
+
+    def test_rsi_sustained_uptrend_no_losses(self):
+        """Test RSI returns 100 (overbought) when avg_loss=0 (sustained uptrend)."""
+        dates = pd.date_range('2020-01-01', periods=50)
+        # Perfect uptrend - every day gains, no losses
+        prices = np.linspace(100, 150, 50)
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = MeanRevStrategy(params={"rsi_period": 14, "rsi_overbought": 70})
+        signals = strategy.calculate_rsi_signal(ohlcv)
+        
+        # After warmup, RSI should be 100 (overbought), generating short signals
+        # Check last 10 days
+        assert (signals.iloc[-10:] == -1).sum() > 0, "Should generate short signals when RSI=100"
+
+
+    def test_rsi_sustained_downtrend_no_gains(self):
+        """Test RSI returns 0 (oversold) when avg_gain=0 (sustained downtrend)."""
+        dates = pd.date_range('2020-01-01', periods=50)
+        # Perfect downtrend - every day losses, no gains
+        prices = np.linspace(100, 50, 50)
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = MeanRevStrategy(params={"rsi_period": 14, "rsi_oversold": 30})
+        signals = strategy.calculate_rsi_signal(ohlcv)
+        
+        # After warmup, RSI should be 0 (oversold), generating long signals
+        # Check last 10 days
+        assert (signals.iloc[-10:] == 1).sum() > 0, "Should generate long signals when RSI=0"
+
+
+    def test_rsi_flat_prices(self):
+        """Test RSI returns 50 (neutral) when both avg_gain=0 and avg_loss=0 (flat)."""
+        dates = pd.date_range('2020-01-01', periods=50)
+        # Completely flat prices
+        prices = [100] * 50
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = MeanRevStrategy(params={"rsi_period": 14})
+        signals = strategy.calculate_rsi_signal(ohlcv)
+        
+        # RSI should be 50 (neutral), generating no signals
+        assert (signals == 0).all(), "Should generate no signals when RSI=50 (flat prices)"
+
+
+    def test_zscore_flat_prices(self):
+        """Test Z-Score returns 0 (neutral) when std=0 (flat prices)."""
+        dates = pd.date_range('2020-01-01', periods=100)
+        # Completely flat prices
+        prices = [100] * 100
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = MeanRevStrategy(params={"zscore_lookback": 60, "zscore_threshold": 1.5})
+        signals = strategy.calculate_zscore_signal(ohlcv)
+        
+        # Z-Score should be 0 (neutral), generating no signals
+        assert (signals == 0).all(), "Should generate no signals when Z-Score=0 (flat prices)"
+
+
+    def test_no_nan_in_rsi_signals(self):
+        """Test that RSI signals never contain NaN values."""
+        dates = pd.date_range('2020-01-01', periods=100)
+        # Mix of uptrend, downtrend, and flat
+        prices = list(np.linspace(100, 120, 30)) + [120] * 20 + list(np.linspace(120, 100, 50))
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = MeanRevStrategy(params={"rsi_period": 14})
+        signals = strategy.calculate_rsi_signal(ohlcv)
+        
+        # After warmup, should have no NaN signals
+        assert signals.iloc[14:].notna().all(), "RSI signals should not contain NaN after warmup"
+
+
+    def test_no_nan_in_zscore_signals(self):
+        """Test that Z-Score signals never contain NaN values."""
+        dates = pd.date_range('2020-01-01', periods=100)
+        # Mix of volatile and flat periods
+        prices = [100 + 10 * np.sin(i / 5) for i in range(50)] + [100] * 50
+        ohlcv = pd.DataFrame({'close': prices}, index=dates)
+        
+        strategy = MeanRevStrategy(params={"zscore_lookback": 60})
+        signals = strategy.calculate_zscore_signal(ohlcv)
+        
+        # After warmup, should have no NaN signals
+        assert signals.iloc[60:].notna().all(), "Z-Score signals should not contain NaN after warmup"

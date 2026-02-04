@@ -10,7 +10,6 @@ Signals are combined using configurable methods (majority, all, weighted).
 """
 
 import pandas as pd
-import numpy as np
 from typing import Dict, Any
 from sage_core.strategies.base import Strategy
 
