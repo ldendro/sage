@@ -6,7 +6,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from sage_core.strategies.passthrough_v1 import PassthroughStrategy
+from sage_core.strategies.passthrough import PassthroughStrategy
 from sage_core.data.loader import load_universe
 
 
