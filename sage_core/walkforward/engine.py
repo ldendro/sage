@@ -6,7 +6,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from sage_core.data.loader import load_universe
-from sage_core.strategies.passthrough_v1 import PassthroughStrategy
+from sage_core.strategies.passthrough import PassthroughStrategy
 from sage_core.allocators.inverse_vol_v1 import compute_inverse_vol_weights
 from sage_core.portfolio.constructor import align_asset_returns, build_portfolio_raw_returns
 from sage_core.portfolio.risk_caps import apply_all_risk_caps
