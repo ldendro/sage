@@ -289,8 +289,8 @@ class MeanRevStrategy(Strategy):
         mean = ohlcv['close'].rolling(window=lookback).mean()
         std = ohlcv['close'].rolling(window=lookback).std()
         
-        # Calculate Z-Score
-        zscore = (ohlcv['close'] - mean) / std
+        # Calculate Z-Score (handle division by zero)
+        zscore = (ohlcv['close'] - mean) / std.replace(0, np.nan)
         
         # Generate signals (contrarian)
         signals = pd.Series(0, index=ohlcv.index, dtype=int)
