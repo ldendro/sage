@@ -138,9 +138,9 @@ class TestStrategyWarmupCalculation:
         assert warmup == 0
     
     def test_single_trend(self):
-        """Test trend strategy has 252-day warmup."""
+        """Test trend strategy has 253-day warmup."""
         warmup = calculate_strategy_warmup({'trend': {'params': {}}})
-        assert warmup == 252
+        assert warmup == 253
     
     def test_single_meanrev(self):
         """Test meanrev strategy has 60-day warmup."""
@@ -153,7 +153,7 @@ class TestStrategyWarmupCalculation:
             'trend': {'params': {}},
             'meanrev': {'params': {}}
         })
-        assert warmup == 252  # max(252, 60)
+        assert warmup == 253  # max(253, 60)
     
     def test_multiple_with_passthrough(self):
         """Test multiple strategies including passthrough."""
@@ -162,7 +162,7 @@ class TestStrategyWarmupCalculation:
             'trend': {'params': {}},
             'meanrev': {'params': {}}
         })
-        assert warmup == 252  # max(0, 252, 60)
+        assert warmup == 253  # max(0, 253, 60)
     
     def test_empty_strategies(self):
         """Test empty strategies dict returns 0."""
@@ -244,13 +244,13 @@ class TestIntegratedWarmupCalculation:
             vol_lookback=60,
         )
         
-        # 252 (strategy) + 0 (meta) + 60 (asset) + 1 + 60 (vol) = 373
-        assert warmup['strategy_warmup'] == 252
+        # 253 (strategy) + 0 (meta) + 60 (asset) + 1 + 60 (vol) = 374
+        assert warmup['strategy_warmup'] == 253
         assert warmup['meta_allocator_warmup'] == 0
         assert warmup['asset_allocator_warmup'] == 60
         assert warmup['first_return'] == 1
         assert warmup['vol_targeting_warmup'] == 60
-        assert warmup['total_trading_days'] == 373
+        assert warmup['total_trading_days'] == 374
     
     def test_multi_strategy_fixed_weight(self):
         """Test total warmup for multi-strategy with FixedWeight."""
@@ -261,10 +261,10 @@ class TestIntegratedWarmupCalculation:
             vol_lookback=60,
         )
         
-        # 252 (max strategy) + 0 (FixedWeight) + 60 (asset) + 1 + 60 (vol) = 373
-        assert warmup['strategy_warmup'] == 252
+        # 253 (max strategy) + 0 (FixedWeight) + 60 (asset) + 1 + 60 (vol) = 374
+        assert warmup['strategy_warmup'] == 253
         assert warmup['meta_allocator_warmup'] == 0
-        assert warmup['total_trading_days'] == 373
+        assert warmup['total_trading_days'] == 374
     
     def test_multi_strategy_risk_parity(self):
         """Test total warmup for multi-strategy with RiskParity."""
@@ -275,13 +275,13 @@ class TestIntegratedWarmupCalculation:
             vol_lookback=60,
         )
         
-        # 252 (max strategy) + 60 (RiskParity) + 60 (asset) + 1 + 60 (vol) = 433
-        assert warmup['strategy_warmup'] == 252
+        # 253 (max strategy) + 60 (RiskParity) + 60 (asset) + 1 + 60 (vol) = 434
+        assert warmup['strategy_warmup'] == 253
         assert warmup['meta_allocator_warmup'] == 60
         assert warmup['asset_allocator_warmup'] == 60
         assert warmup['first_return'] == 1
         assert warmup['vol_targeting_warmup'] == 60
-        assert warmup['total_trading_days'] == 433
+        assert warmup['total_trading_days'] == 434
     
     def test_warmup_description_includes_all_layers(self):
         """Test description includes all warmup layers."""
@@ -293,9 +293,9 @@ class TestIntegratedWarmupCalculation:
         )
         
         description = warmup['description']
-        assert 'Strategy (252d)' in description
+        assert 'Strategy (253d)' in description
         assert 'Meta allocator (60d)' in description
         assert 'Asset allocator (60d)' in description
         assert 'First return (1d)' in description
         assert 'Vol targeting (60d)' in description
-        assert '433 trading days' in description
+        assert '434 trading days' in description

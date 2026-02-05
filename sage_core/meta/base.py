@@ -107,11 +107,11 @@ class MetaAllocator(ABC):
         
         Example:
             >>> # Strategies have different warmups (already masked)
-            >>> trend_ret = pd.Series([np.nan]*252 + [0.01]*100, index=dates)  # 252-day warmup
+            >>> trend_ret = pd.Series([np.nan]*253 + [0.01]*100, index=dates)  # 253-day warmup
             >>> meanrev_ret = pd.Series([np.nan]*60 + [0.02]*292, index=dates)  # 60-day warmup
             >>> allocator = FixedWeightAllocator({'weights': {'trend': 0.6, 'meanrev': 0.4}})
             >>> result = allocator.allocate({'trend': trend_ret, 'meanrev': meanrev_ret})
-            >>> # Both aligned to start at day 252 for fair comparison
+            >>> # Both aligned to start at day 253 for fair comparison
         """
         # Step 1: Align all strategies to max warmup (for fair comparison)
         aligned_returns, strategy_warmup_idx = self._align_strategy_warmups(strategy_returns)
@@ -162,11 +162,11 @@ class MetaAllocator(ABC):
             - max_warmup_idx: Index where aligned strategies start
         
         Example:
-            >>> trend = pd.Series([np.nan]*252 + [0.01]*100, index=dates)  # 252-day warmup
+            >>> trend = pd.Series([np.nan]*253 + [0.01]*100, index=dates)  # 253-day warmup
             >>> meanrev = pd.Series([np.nan]*60 + [0.02]*292, index=dates)  # 60-day warmup
             >>> aligned, warmup_idx = self._align_strategy_warmups({'trend': trend, 'meanrev': meanrev})
-            >>> # Both start at index 252 (max warmup), warmup_idx = 252
-            >>> # MeanRev days 60-251 are masked for fair comparison
+            >>> # Both start at index 253 (max warmup), warmup_idx = 253
+            >>> # MeanRev days 60-252 are masked for fair comparison
         """
         # Find max warmup across all strategies
         max_warmup_idx = 0

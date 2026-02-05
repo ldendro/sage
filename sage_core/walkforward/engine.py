@@ -6,7 +6,8 @@ import logging
 from typing import Dict, Any, Optional
 
 from sage_core.data.loader import load_universe
-from sage_core.strategies.passthrough import PassthroughStrategy
+from sage_core.strategies import get_strategy
+from sage_core.meta import get_meta_allocator
 from sage_core.allocators.inverse_vol_v1 import compute_inverse_vol_weights
 from sage_core.portfolio.constructor import align_asset_returns, build_portfolio_raw_returns
 from sage_core.portfolio.risk_caps import apply_all_risk_caps
@@ -134,17 +135,8 @@ def run_system_walkforward(
     for strategy_name, config in strategies.items():
         params = config.get('params', {})
         
-        if strategy_name == 'passthrough':
-            from sage_core.strategies.passthrough import PassthroughStrategy
-            strategy_instances[strategy_name] = PassthroughStrategy()
-        elif strategy_name == 'trend':
-            from sage_core.strategies.trend import TrendStrategy
-            strategy_instances[strategy_name] = TrendStrategy(params=params)
-        elif strategy_name == 'meanrev':
-            from sage_core.strategies.meanrev import MeanRevStrategy
-            strategy_instances[strategy_name] = MeanRevStrategy(params=params)
-        else:
-            raise ValueError(f"Unknown strategy: {strategy_name}")
+        # Use factory function to instantiate strategy
+        strategy_instances[strategy_name] = get_strategy(strategy_name, params)
         
         logger.info(f"Running strategy: {strategy_name}")
         strategy_results[strategy_name] = strategy_instances[strategy_name].run(ohlcv_data)
@@ -158,22 +150,16 @@ def run_system_walkforward(
     else:
         # Multiple strategies: use meta allocator
         logger.info(f"Multiple strategies detected ({len(strategies)}) - using meta allocator")
-        from sage_core.meta import FixedWeightAllocator, RiskParityAllocator
         
         # Instantiate meta allocator once
         if meta_allocator is None:
             # Default: equal weight
             weights = {name: 1.0 / len(strategies) for name in strategies.keys()}
-            allocator = FixedWeightAllocator(params={'weights': weights})
+            allocator = get_meta_allocator('fixed_weight', {'weights': weights})
             logger.info(f"Using default FixedWeightAllocator with equal weights")
-        elif meta_allocator['type'] == 'fixed_weight':
-            allocator = FixedWeightAllocator(params=meta_allocator['params'])
-            logger.info(f"Using FixedWeightAllocator")
-        elif meta_allocator['type'] == 'risk_parity':
-            allocator = RiskParityAllocator(params=meta_allocator['params'])
-            logger.info(f"Using RiskParityAllocator")
         else:
-            raise ValueError(f"Unknown meta allocator: {meta_allocator['type']}")
+            allocator = get_meta_allocator(meta_allocator['type'], meta_allocator['params'])
+            logger.info(f"Using {meta_allocator['type']} meta allocator")
         
         # Combine returns for each asset
         combined_data = {}
@@ -349,11 +335,8 @@ def run_system_walkforward(
         "asset_returns": asset_returns_clean,
         "warmup_info": warmup_info,  # Warmup period breakdown
         "warmup_start_date": warmup_start_date,  # Actual start date for data loading
-        # NEW: Strategy information
         "strategies_used": list(strategies.keys()),
         "meta_allocator_used": (
-            meta_allocator['type'] 
-            if len(strategies) > 1 and meta_allocator 
-            else None
-        ),
+            meta_allocator['type'] if meta_allocator else 'fixed_weight'
+        ) if len(strategies) > 1 else None,
     }

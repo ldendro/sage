@@ -233,7 +233,7 @@ class TestMultiStrategyIntegration:
         assert result['meta_allocator_used'] is None
         
         # Verify warmup
-        assert result['warmup_info']['strategy_warmup'] == 252
+        assert result['warmup_info']['strategy_warmup'] == 253
         assert result['warmup_info']['meta_allocator_warmup'] == 0
         
         # Verify results exist
@@ -279,7 +279,7 @@ class TestMultiStrategyIntegration:
         assert result['meta_allocator_used'] == 'fixed_weight'
         
         # Verify warmup (max strategy + meta allocator)
-        assert result['warmup_info']['strategy_warmup'] == 252  # max(252, 60)
+        assert result['warmup_info']['strategy_warmup'] == 253  # max(253, 60)
         assert result['warmup_info']['meta_allocator_warmup'] == 0  # FixedWeight
         
         # Verify results
@@ -306,11 +306,11 @@ class TestMultiStrategyIntegration:
         assert result['meta_allocator_used'] == 'risk_parity'
         
         # Verify warmup includes Risk Parity warmup
-        assert result['warmup_info']['strategy_warmup'] == 252
+        assert result['warmup_info']['strategy_warmup'] == 253
         assert result['warmup_info']['meta_allocator_warmup'] == 60
         
-        # Total warmup = 252 + 60 + 60 + 1 + 60 = 433
-        assert result['warmup_info']['total_trading_days'] == 433
+        # Total warmup = 253 + 60 + 60 + 1 + 60 = 434
+        assert result['warmup_info']['total_trading_days'] == 434
         
         # Verify results
         assert len(result['returns']) > 0
@@ -329,7 +329,7 @@ class TestMultiStrategyIntegration:
         )
         
         assert set(result['strategies_used']) == {'trend', 'meanrev'}
-        assert result['meta_allocator_used'] is None  # Default FixedWeight not tracked
+        assert result['meta_allocator_used'] == 'fixed_weight'  # Default FixedWeight not tracked
         
         # Should still work and produce results
         assert len(result['returns']) > 0

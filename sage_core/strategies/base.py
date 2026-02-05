@@ -53,7 +53,9 @@ class Strategy(ABC):
         Return required warmup period in trading days.
         
         This is the minimum number of days of historical data needed
-        before the strategy can generate valid signals.
+        before the strategy can generate valid returns. If
+        calculate_returns uses a signal lag (e.g., shift(1)), include
+        that lag in the warmup period.
         
         Returns:
             Warmup period in trading days

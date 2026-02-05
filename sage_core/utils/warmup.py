@@ -1,13 +1,12 @@
-"""
-Warmup period calculation for backtesting.
-
-This module centralizes warmup logic to make it easy to update
-when new system parameters are added.
-"""
+"""Warmup period calculation utilities."""
 
 from typing import Dict, Any, Optional
+import logging
 
+from sage_core.strategies import get_strategy
+from sage_core.meta import get_meta_allocator
 
+logger = logging.getLogger(__name__)
 
 def calculate_strategy_warmup(strategies: Dict[str, Dict[str, Any]]) -> int:
     """
@@ -25,7 +24,7 @@ def calculate_strategy_warmup(strategies: Dict[str, Dict[str, Any]]) -> int:
         ...     'meanrev': {'params': {}}
         ... }
         >>> calculate_strategy_warmup(strategies)
-        252  # TrendStrategy has 252-day warmup (max)
+        253  # TrendStrategy has 253-day warmup (max)
     """
     if not strategies:
         return 0
@@ -34,17 +33,9 @@ def calculate_strategy_warmup(strategies: Dict[str, Dict[str, Any]]) -> int:
     for strategy_name, config in strategies.items():
         params = config.get('params', {})
         
-        if strategy_name == 'passthrough':
-            from sage_core.strategies.passthrough import PassthroughStrategy
-            warmup = PassthroughStrategy().get_warmup_period()
-        elif strategy_name == 'trend':
-            from sage_core.strategies.trend import TrendStrategy
-            warmup = TrendStrategy(params=params).get_warmup_period()
-        elif strategy_name == 'meanrev':
-            from sage_core.strategies.meanrev import MeanRevStrategy
-            warmup = MeanRevStrategy(params=params).get_warmup_period()
-        else:
-            raise ValueError(f"Unknown strategy: {strategy_name}")
+        # Use factory function to instantiate strategy
+        strategy = get_strategy(strategy_name, params)
+        warmup = strategy.get_warmup_period()
         
         max_warmup = max(max_warmup, warmup)
     
@@ -81,14 +72,9 @@ def calculate_meta_allocator_warmup(
     allocator_type = meta_allocator.get('type', 'fixed_weight')
     params = meta_allocator.get('params', {})
     
-    if allocator_type == 'fixed_weight':
-        from sage_core.meta import FixedWeightAllocator
-        return FixedWeightAllocator(params=params).get_warmup_period()
-    elif allocator_type == 'risk_parity':
-        from sage_core.meta import RiskParityAllocator
-        return RiskParityAllocator(params=params).get_warmup_period()
-    else:
-        raise ValueError(f"Unknown meta allocator type: {allocator_type}")
+    # Use factory function to instantiate meta allocator
+    allocator = get_meta_allocator(allocator_type, params)
+    return allocator.get_warmup_period()
 
 def calculate_warmup_period(
     strategies: Dict[str, Dict[str, Any]],
@@ -107,12 +93,12 @@ def calculate_warmup_period(
     5. vol_lookback days to accumulate portfolio returns for vol targeting
     
     Timeline example (Trend+MeanRev, Risk Parity meta allocator):
-    - Day 1-252: Strategy warmup (max of Trend=252, MeanRev=60)
-    - Day 253-312: Meta allocator warmup (Risk Parity needs 60 days)
-    - Day 313-372: Asset allocator warmup (inverse vol needs 60 days)
-    - Day 373: First weights generated, first portfolio return
-    - Day 374-433: Portfolio returns accumulate (leverage = 1.0)
-    - Day 434: Vol targeting activates (60 days of portfolio returns available)
+    - Day 1-253: Strategy warmup (max of Trend=253, MeanRev=60)
+    - Day 254-313: Meta allocator warmup (Risk Parity needs 60 days)
+    - Day 314-373: Asset allocator warmup (inverse vol needs 60 days)
+    - Day 374: First weights generated, first portfolio return
+    - Day 375-434: Portfolio returns accumulate (leverage = 1.0)
+    - Day 435: Vol targeting activates (60 days of portfolio returns available)
     
     Total warmup = strategy + meta_allocator + vol_window + 1 + vol_lookback
     
@@ -144,7 +130,7 @@ def calculate_warmup_period(
         ...     vol_lookback=60,
         ... )
         >>> warmup['total_trading_days']
-        373  # 252 + 0 + 60 + 1 + 60
+        374  # 253 + 0 + 60 + 1 + 60
         
         >>> # Multi-strategy with Risk Parity
         >>> warmup = calculate_warmup_period(
@@ -154,7 +140,7 @@ def calculate_warmup_period(
         ...     vol_lookback=60,
         ... )
         >>> warmup['total_trading_days']
-        433  # 252 + 60 + 60 + 1 + 60
+        434  # 253 + 60 + 60 + 1 + 60
     """
     # Calculate strategy warmup using helper function
     strategy_warmup_days = calculate_strategy_warmup(strategies)

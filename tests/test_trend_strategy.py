@@ -141,9 +141,9 @@ class TestTrendStrategyWarmup:
     
     def test_trend_warmup_period_max_of_lookbacks(self):
         """Test that warmup period is max of all indicator lookbacks."""
-        # Default params: max(252, 200, 252) = 252
+        # Default params: max(252+1, 200, 252) = 253
         strategy = TrendStrategy()
-        assert strategy.get_warmup_period() == 252
+        assert strategy.get_warmup_period() == 253
         
         # Custom params where sma_long is longest
         strategy = TrendStrategy(params={
@@ -416,7 +416,7 @@ class TestTrendStrategyIntegration:
     
     def test_run_with_real_data(self):
         """Test full run() with real market data."""
-        # Use 2 years of data since TrendStrategy has 252-day warmup
+        # Use 2 years of data since TrendStrategy has 253-day warmup
         data = load_universe(["SPY"], "2020-01-01", "2021-12-31")
         
         strategy = TrendStrategy()
@@ -427,15 +427,15 @@ class TestTrendStrategyIntegration:
         # Should have meta_raw_ret column
         assert 'meta_raw_ret' in spy_df.columns
         
-        # First 252 days should be NaN (warmup)
+        # First warmup days should be NaN
         warmup = strategy.get_warmup_period()
         assert spy_df['meta_raw_ret'].iloc[:warmup].isna().all()
         
         # Should have valid returns after warmup
         assert spy_df['meta_raw_ret'].iloc[warmup:].notna().sum() > 0
         
-        # Warmup period should be 252 (default)
-        assert strategy.get_warmup_period() == 252
+        # Warmup period should be 253 (default)
+        assert strategy.get_warmup_period() == 253
 
 
 class TestTrendStrategyEdgeCases:
