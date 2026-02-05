@@ -246,9 +246,9 @@ def default_meta_params():
 # Warmup Helper Functions
 # ============================================================================
 
-def get_warmup_period(vol_window: int, vol_lookback: int) -> int:
+def default_warmup_days(vol_window, vol_lookback):
     """
-    Helper to calculate warmup period for tests.
+    Calculate default warmup period in trading days.
     
     Args:
         vol_window: Volatility window for inverse vol allocator
@@ -256,11 +256,11 @@ def get_warmup_period(vol_window: int, vol_lookback: int) -> int:
     
     Returns:
         Total warmup period in trading days
-    
-    Example:
-        >>> warmup_days = get_warmup_period(vol_window=20, vol_lookback=60)
-        >>> weights_after_warmup = weights.iloc[warmup_days:]
     """
     from sage_core.utils.warmup import calculate_warmup_period
-    return calculate_warmup_period(vol_window, vol_lookback)["total_trading_days"]
-
+    return calculate_warmup_period(
+        strategies={'passthrough': {'params': {}}},
+        meta_allocator=None,
+        vol_window=vol_window,
+        vol_lookback=vol_lookback
+    )["total_trading_days"]

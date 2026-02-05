@@ -416,7 +416,8 @@ class TestTrendStrategyIntegration:
     
     def test_run_with_real_data(self):
         """Test full run() with real market data."""
-        data = load_universe(["SPY"], "2020-01-01", "2020-12-31")
+        # Use 2 years of data since TrendStrategy has 252-day warmup
+        data = load_universe(["SPY"], "2020-01-01", "2021-12-31")
         
         strategy = TrendStrategy()
         result = strategy.run(data)
@@ -426,8 +427,12 @@ class TestTrendStrategyIntegration:
         # Should have meta_raw_ret column
         assert 'meta_raw_ret' in spy_df.columns
         
-        # Should have some valid returns after warmup
-        assert spy_df['meta_raw_ret'].notna().sum() > 0
+        # First 252 days should be NaN (warmup)
+        warmup = strategy.get_warmup_period()
+        assert spy_df['meta_raw_ret'].iloc[:warmup].isna().all()
+        
+        # Should have valid returns after warmup
+        assert spy_df['meta_raw_ret'].iloc[warmup:].notna().sum() > 0
         
         # Warmup period should be 252 (default)
         assert strategy.get_warmup_period() == 252

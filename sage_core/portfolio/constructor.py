@@ -61,10 +61,6 @@ def align_asset_returns(
     # Use outer join to handle any date misalignments
     returns_wide = pd.DataFrame(returns_dict)
     
-    # Fill NaN with 0 (if any dates are missing for some assets)
-    # This is conservative - missing data = no return
-    returns_wide = returns_wide.fillna(0.0)
-    
     return returns_wide
 
 

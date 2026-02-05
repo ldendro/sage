@@ -451,7 +451,6 @@ elif st.session_state.backtest_results is not None:
     
     # Optional: Add info box explaining warmup
     with st.expander("ℹ️ About Warmup Period", expanded=False):
-        components = warmup_info.get("components", {})
         total_trading = warmup_info.get("total_trading_days", 0)
         
         st.markdown(f"""
@@ -460,11 +459,11 @@ elif st.session_state.backtest_results is not None:
         {warmup_info.get("description", "N/A")}
         
         **Sequential Breakdown:**
-        1. **Inverse Vol Warmup:** {components.get('inverse_vol', 0)} days
+        1. **Inverse Vol Warmup:** {warmup_info.get('asset_allocator_warmup', 0)} days
            - Needed to calculate first weights
-        2. **First Portfolio Return:** {components.get('first_return', 1)} day
+        2. **First Portfolio Return:** {warmup_info.get('first_return', 1)} day
            - Day when first weights are applied
-        3. **Vol Targeting Warmup:** {components.get('vol_targeting', 0)} days  
+        3. **Vol Targeting Warmup:** {warmup_info.get('vol_targeting_warmup', 0)} days  
            - Needed to accumulate portfolio returns for vol targeting
         
         **Total:** {total_trading} trading days (system fully active after this)

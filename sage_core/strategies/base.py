@@ -108,28 +108,38 @@ class Strategy(ABC):
         Run strategy on asset data (template method).
         
         This is the main entry point that orchestrates the strategy logic.
-        It applies the strategy to each asset in the universe.
+        It applies the strategy to each asset in the universe and masks
+        the warmup period with NaN.
         
         Args:
             asset_data: Dict mapping symbol to DataFrame with OHLCV + raw_ret
         
         Returns:
-            Dict mapping symbol to DataFrame with added 'meta_raw_ret' column
+            Dict mapping symbol to DataFrame with added 'meta_raw_ret' column.
+            The first `get_warmup_period()` rows of 'meta_raw_ret' are NaN.
             
         Example:
             >>> data = load_universe(["SPY", "QQQ"], "2020-01-01", "2020-12-31")
-            >>> strategy = PassthroughStrategy()
+            >>> strategy = TrendStrategy(params={"momentum_lookback": 252})
             >>> result = strategy.run(data)
             >>> assert "meta_raw_ret" in result["SPY"].columns
+            >>> # First 252 rows are NaN (warmup)
+            >>> assert result["SPY"]["meta_raw_ret"].iloc[:252].isna().all()
         """
         result = {}
+        warmup = self.get_warmup_period()
         
         for symbol, df in asset_data.items():
             df_copy = df.copy()
             
             # Calculate strategy returns
-            df_copy['meta_raw_ret'] = self.calculate_returns(df_copy)
+            raw_returns = self.calculate_returns(df_copy)
             
+            # Mask warmup period with NaN
+            if warmup > 0:
+                raw_returns.iloc[:warmup] = pd.NA
+            
+            df_copy['meta_raw_ret'] = raw_returns
             result[symbol] = df_copy
         
         return result
