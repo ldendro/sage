@@ -6,7 +6,8 @@ import logging
 from typing import Dict, Any, Optional
 
 from sage_core.data.loader import load_universe
-from sage_core.strategies.passthrough import PassthroughStrategy
+from sage_core.strategies import get_strategy
+from sage_core.meta import get_meta_allocator
 from sage_core.allocators.inverse_vol_v1 import compute_inverse_vol_weights
 from sage_core.portfolio.constructor import align_asset_returns, build_portfolio_raw_returns
 from sage_core.portfolio.risk_caps import apply_all_risk_caps
@@ -23,6 +24,9 @@ def run_system_walkforward(
     universe: list[str],
     start_date: str,
     end_date: str,
+    # NEW: Strategy configuration
+    strategies: Optional[Dict[str, Dict[str, Any]]] = None,
+    meta_allocator: Optional[Dict[str, Any]] = None,
     # Risk caps
     max_weight_per_asset: float = 0.25,
     max_sector_weight: Optional[float] = None,
@@ -86,14 +90,16 @@ def run_system_walkforward(
         ... )
         >>> print(f"Sharpe: {result['metrics']['sharpe_ratio']:.2f}")
     """
-    # Calculate warmup period using centralized function
-    # For now, strategy_warmup=0 since we only have Passthrough (no warmup needed)
-    # In Steps 3B.2/3B.3, this will be dynamic based on selected strategy
-    strategy_warmup = 0  # Passthrough has 0 warmup
+    # Default to passthrough if no strategies specified (backward compatible)
+    if strategies is None:
+        strategies = {'passthrough': {'params': {}}}
+    
+    # Calculate warmup period using abstracted function
     warmup_info = calculate_warmup_period(
+        strategies=strategies,
+        meta_allocator=meta_allocator,
         vol_window=vol_window,
         vol_lookback=vol_lookback,
-        strategy_warmup=strategy_warmup,
     )
     warmup_trading_days = warmup_info["total_trading_days"]
     
@@ -121,10 +127,60 @@ def run_system_walkforward(
         end_date=end_date,
     )
     
-    # Step 2: Run strategy (adds meta_raw_ret column to each DataFrame)
-    strategy_data = PassthroughStrategy().run(ohlcv_data)
     
-    # Step 3: Align asset returns (uses meta_raw_ret from strategy)
+    # Step 2: Run strategies
+    strategy_instances = {}
+    strategy_results = {}
+    
+    for strategy_name, config in strategies.items():
+        params = config.get('params', {})
+        
+        # Use factory function to instantiate strategy
+        strategy_instances[strategy_name] = get_strategy(strategy_name, params)
+        
+        logger.info(f"Running strategy: {strategy_name}")
+        strategy_results[strategy_name] = strategy_instances[strategy_name].run(ohlcv_data)
+    
+    # Step 3: Combine strategies using meta allocator (if multiple strategies)
+    if len(strategies) == 1:
+        # Single strategy: use returns directly (skip meta allocator)
+        logger.info("Single strategy detected - skipping meta allocator")
+        strategy_name = list(strategies.keys())[0]
+        strategy_data = strategy_results[strategy_name]
+    else:
+        # Multiple strategies: use meta allocator
+        logger.info(f"Multiple strategies detected ({len(strategies)}) - using meta allocator")
+        
+        # Instantiate meta allocator once
+        if meta_allocator is None:
+            # Default: equal weight
+            weights = {name: 1.0 / len(strategies) for name in strategies.keys()}
+            allocator = get_meta_allocator('fixed_weight', {'weights': weights})
+            logger.info(f"Using default FixedWeightAllocator with equal weights")
+        else:
+            allocator = get_meta_allocator(meta_allocator['type'], meta_allocator['params'])
+            logger.info(f"Using {meta_allocator['type']} meta allocator")
+        
+        # Combine returns for each asset
+        combined_data = {}
+        for symbol in ohlcv_data.keys():
+            # Get returns from each strategy for this asset
+            strategy_returns = {
+                name: results[symbol]['meta_raw_ret']
+                for name, results in strategy_results.items()
+            }
+            
+            # Combine returns
+            result = allocator.allocate(strategy_returns)
+            
+            # Build combined DataFrame
+            df = ohlcv_data[symbol].copy()
+            df['meta_raw_ret'] = result['combined_returns']
+            combined_data[symbol] = df
+        
+        strategy_data = combined_data
+    
+    # Step 4: Align asset returns (uses meta_raw_ret from strategy/meta allocator)
     asset_returns = align_asset_returns(asset_data=strategy_data)
     
     # Validate cap_mode
@@ -279,4 +335,8 @@ def run_system_walkforward(
         "asset_returns": asset_returns_clean,
         "warmup_info": warmup_info,  # Warmup period breakdown
         "warmup_start_date": warmup_start_date,  # Actual start date for data loading
+        "strategies_used": list(strategies.keys()),
+        "meta_allocator_used": (
+            meta_allocator['type'] if meta_allocator else 'fixed_weight'
+        ) if len(strategies) > 1 else None,
     }

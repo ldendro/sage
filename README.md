@@ -44,7 +44,7 @@ The backtesting engine and research library:
 - **Walkforward**: Orchestration engine with configurable frequencies
 - **Cache**: Config-based result caching for fast iteration
 
-### `sage_viz` - Visualization UI
+### `app` - Visualization UI
 Streamlit-based interactive research interface:
 - Define up to 5 system configurations simultaneously
 - Edit configs via dynamic sidebar controls
@@ -52,83 +52,82 @@ Streamlit-based interactive research interface:
 - Compare equity curves, yearly metrics, risk statistics
 - Export results and configurations
 
----
-
-## Project Structure
-
-```
-sage/
-├── sage_core/              # Core backtesting engine
-│   ├── data/              # Data ingestion & loading
-│   ├── config/            # System configuration models
-│   ├── strategies/        # Trading strategies
-│   ├── meta/              # Meta-layer (regime, gating)
-│   ├── allocators/        # Portfolio allocators
-│   ├── portfolio/         # Portfolio construction & risk
-│   ├── walkforward/       # Walkforward engine
-│   ├── cache/             # Result caching
-│   └── utils/             # Shared utilities
-├── sage_viz/              # Streamlit visualization app
-│   ├── app.py            # Main Streamlit entry point
-│   └── ui/               # UI components
-├── configs/               # Configuration files
-│   └── presets/          # Preset system configs (TOML)
-├── data/                  # Market data
-│   ├── raw/              # Raw downloaded data
-│   └── processed/        # Cleaned & validated data
-├── cache/                 # Cached backtest results
-│   └── systems/          # Per-system result storage
-├── tests/                 # Test suite
-├── scripts/               # Utility scripts
-└── docs/                  # Documentation
-```
-
----
-
-## Quick Start
-
-### Installation
-
-```bash
-# Clone the repository
-git clone <repo-url>
-cd sage
-
-# Install in development mode
-pip install -e ".[dev]"
-```
-
-### Running the Streamlit App
-
-```bash
-# Launch the visualization interface
-streamlit run sage_viz/app.py
-
-# Or use the convenience script
-python scripts/run_app.py
-```
-
-### Running a Single Backtest (CLI)
-
-```bash
-# Run a preset configuration
-python scripts/run_single_backtest.py --config configs/presets/baseline_invvol.toml
-```
 
 ---
 
 ## Development Status
 
-**Current Phase**: Phase 0 - Repository Bootstrap
+**Current Phase**: Phase 3 - Cycle 1 (Foundation)  
+**Current Focus**: Meta Allocation Layer (3C)
 
-### Roadmap
-
+### Completed
 - [x] **Phase 0**: Repository structure, packaging, core models
-- [ ] **Phase 1**: Basic engine with simple strategy and inverse-vol allocator
-- [ ] **Phase 2**: Streamlit UI v1 (single then multi-config comparison)
-- [ ] **Phase 3**: Integrate real strategies & allocators from legacy phases
-- [ ] **Phase 4**: Configurable frequencies & schedules (annual/quarterly rebalancing)
-- [ ] **Phase 5**: Risk metrics, UX enhancements, "Hall of Fame" top systems
+- [x] **Phase 1**: Basic engine with inverse-vol allocator
+- [x] **Phase 2**: Professional Streamlit UI with multi-tab analytics
+- [x] **Phase 3A**: Core system (real data, warmup, risk caps)
+- [x] **Phase 3B**: Strategy framework (Trend, Mean Reversion)
+
+### Phase 3: Research Platform - Iterative Cycles
+
+**Approach**: Cyclic development across all system layers
+
+#### Cycle 1: Foundation (Current - 4-6 weeks)
+**Goal**: Complete minimum viable research platform
+
+- [x] **3A-3B**: Core system + Strategies ✅
+- [ ] **3C**: Meta Allocation Layer (Current)
+  - Strategy warmup masking
+  - Meta allocator framework
+  - Fixed Weight + Risk Parity meta allocators
+  - Engine and UI integration
+- [ ] **3D**: Asset Allocator Suite
+  - Minimum Variance allocator
+  - Risk Parity allocator (asset-level)
+- [ ] **3E**: Transaction Costs
+  - Cost framework (commissions, spread)
+  - Engine integration
+
+**Cycle 1 Deliverable**: Production-ready research platform
+
+#### Cycle 2: Enhancement (Future - can run parallel to Phase 4)
+- Additional strategies (Carry, Value, Statistical Arbitrage)
+- Regime detection and strategy gating
+- Advanced meta allocation methods
+- Risk contribution analytics
+- UI polish and advanced visualizations
+
+#### Cycle 3: Optimization (Future - can run parallel to Phase 5)
+- Performance optimization (10x improvement)
+- Scalability (100+ assets)
+- Parameter optimization framework
+- Research workflow tools
+
+**Key Insight**: Complete Cycle 1, then iterate on Cycles 2-3 while building live trading infrastructure (Phase 4+)
+
+### Roadmap to Live Trading
+
+- [ ] **Phase 4** (2-3 months): Pre-Live Trading Infrastructure
+  - Paper trading engine
+  - Real-time data integration
+  - Risk monitoring system
+  - *Can run parallel to Cycle 2*
+
+- [ ] **Phase 5** (1-2 months): Broker Integration
+  - Broker abstraction layer (Alpaca, IB)
+  - Order execution engine
+  - Paper trading validation
+  - *Can run parallel to Cycle 3*
+
+- [ ] **Phase 6** (1-2 months): Live Trading Launch
+  - Pre-launch validation
+  - Soft launch → Full deployment
+  - *Cycles 2-3 continue as ongoing improvements*
+
+**Timeline**: 
+- Cycle 1: 4-6 weeks
+- Phase 4-6: 12-18 months (with Cycles 2-3 in parallel)
+
+See `docs/PHASE_3_PLAN.md` for detailed cycle breakdown.
 
 ---
 

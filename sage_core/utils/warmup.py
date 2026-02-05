@@ -1,92 +1,192 @@
-"""
-Warmup period calculation for backtesting.
+"""Warmup period calculation utilities."""
 
-This module centralizes warmup logic to make it easy to update
-when new system parameters are added.
-"""
+from typing import Dict, Any, Optional
+import logging
 
-from typing import Dict
+from sage_core.strategies import get_strategy
+from sage_core.meta import get_meta_allocator
 
+logger = logging.getLogger(__name__)
+
+def calculate_strategy_warmup(strategies: Dict[str, Dict[str, Any]]) -> int:
+    """
+    Calculate maximum warmup period across all strategies.
+    
+    Args:
+        strategies: Dict mapping strategy_name -> {'params': {...}}
+    
+    Returns:
+        Maximum warmup period in trading days
+    
+    Example:
+        >>> strategies = {
+        ...     'trend': {'params': {}},
+        ...     'meanrev': {'params': {}}
+        ... }
+        >>> calculate_strategy_warmup(strategies)
+        253  # TrendStrategy has 253-day warmup (max)
+    """
+    if not strategies:
+        return 0
+    
+    max_warmup = 0
+    for strategy_name, config in strategies.items():
+        params = config.get('params', {})
+        
+        # Use factory function to instantiate strategy
+        strategy = get_strategy(strategy_name, params)
+        warmup = strategy.get_warmup_period()
+        
+        max_warmup = max(max_warmup, warmup)
+    
+    return max_warmup
+
+
+def calculate_meta_allocator_warmup(
+    meta_allocator: Optional[Dict[str, Any]],
+    num_strategies: int
+) -> int:
+    """
+    Calculate meta allocator warmup period.
+    
+    Args:
+        meta_allocator: {'type': 'fixed_weight'|'risk_parity', 'params': {...}}
+        num_strategies: Number of strategies (skip meta allocator if 1)
+    
+    Returns:
+        Meta allocator warmup period in trading days
+    
+    Example:
+        >>> meta_allocator = {'type': 'risk_parity', 'params': {'vol_lookback': 60}}
+        >>> calculate_meta_allocator_warmup(meta_allocator, num_strategies=2)
+        60
+    """
+    # Skip meta allocator if only one strategy
+    if num_strategies <= 1:
+        return 0
+    
+    if meta_allocator is None:
+        # Default: FixedWeightAllocator has 0 warmup
+        return 0
+    
+    allocator_type = meta_allocator.get('type', 'fixed_weight')
+    params = meta_allocator.get('params', {})
+    
+    # Use factory function to instantiate meta allocator
+    allocator = get_meta_allocator(allocator_type, params)
+    return allocator.get_warmup_period()
 
 def calculate_warmup_period(
+    strategies: Dict[str, Dict[str, Any]],
+    meta_allocator: Optional[Dict[str, Any]],
     vol_window: int,
     vol_lookback: int,
-    strategy_warmup: int = 0,
-) -> Dict[str, any]:
+) -> Dict[str, Any]:
     """
     Calculate total warmup period needed for all system components.
     
     Warmup is calculated sequentially in TRADING DAYS:
     1. strategy_warmup days to generate valid strategy returns (meta_raw_ret)
-    2. vol_window days to generate first weights (inverse vol on strategy returns)
-    3. 1 day for first portfolio return
-    4. vol_lookback days to accumulate portfolio returns for vol targeting
+    2. meta_allocator_warmup days to combine strategy returns (if multi-strategy)
+    3. vol_window days to generate first weights (inverse vol on combined returns)
+    4. 1 day for first portfolio return
+    5. vol_lookback days to accumulate portfolio returns for vol targeting
     
-    Timeline example (strategy_warmup=252, vol_window=60, vol_lookback=60):
-    - Day 1-252: Strategy warmup (no valid meta_raw_ret yet)
-    - Day 253-312: Inverse vol warmup (using strategy returns from days 1-312)
-    - Day 313: First weights generated, first portfolio return
-    - Day 314-373: Portfolio returns accumulate (leverage = 1.0)
-    - Day 374: Vol targeting activates (60 days of portfolio returns available)
+    Timeline example (Trend+MeanRev, Risk Parity meta allocator):
+    - Day 1-253: Strategy warmup (max of Trend=253, MeanRev=60)
+    - Day 254-313: Meta allocator warmup (Risk Parity needs 60 days)
+    - Day 314-373: Asset allocator warmup (inverse vol needs 60 days)
+    - Day 374: First weights generated, first portfolio return
+    - Day 375-434: Portfolio returns accumulate (leverage = 1.0)
+    - Day 435: Vol targeting activates (60 days of portfolio returns available)
     
-    Total warmup = strategy_warmup + vol_window + 1 + vol_lookback (in TRADING DAYS)
+    Total warmup = strategy + meta_allocator + vol_window + 1 + vol_lookback
     
     Note: The engine uses pandas market calendars to go back this many business days,
     automatically accounting for weekends and holidays.
     
     Args:
-        vol_window: Lookback for inverse volatility weights
+        strategies: Dict mapping strategy_name -> {'params': {...}}
+        meta_allocator: {'type': 'fixed_weight'|'risk_parity', 'params': {...}}
+        vol_window: Lookback for inverse volatility weights (asset allocator)
         vol_lookback: Lookback for volatility targeting
-        strategy_warmup: Warmup period for strategy layer (default: 0 for passthrough)
     
     Returns:
         Dictionary with:
-            - total_trading_days: Total warmup period in trading days
-            - components: Breakdown by component
-            - description: Human-readable explanation
+            - strategy_warmup: int
+            - meta_allocator_warmup: int
+            - asset_allocator_warmup: int
+            - first_return: int (always 1)
+            - vol_targeting_warmup: int
+            - total_trading_days: int
+            - description: str
     
     Example:
-        >>> # Passthrough strategy (no warmup)
-        >>> warmup = calculate_warmup_period(vol_window=60, vol_lookback=60)
-        >>> print(warmup['total_trading_days'])
-        121
-        
-        >>> # Trend strategy (252-day warmup)
+        >>> # Single strategy (no meta allocator)
         >>> warmup = calculate_warmup_period(
-        ...     vol_window=60, 
-        ...     vol_lookback=60, 
-        ...     strategy_warmup=252
+        ...     strategies={'trend': {'params': {}}},
+        ...     meta_allocator=None,
+        ...     vol_window=60,
+        ...     vol_lookback=60,
         ... )
-        >>> print(warmup['total_trading_days'])
-        373
+        >>> warmup['total_trading_days']
+        374  # 253 + 0 + 60 + 1 + 60
+        
+        >>> # Multi-strategy with Risk Parity
+        >>> warmup = calculate_warmup_period(
+        ...     strategies={'trend': {}, 'meanrev': {}},
+        ...     meta_allocator={'type': 'risk_parity', 'params': {'vol_lookback': 60}},
+        ...     vol_window=60,
+        ...     vol_lookback=60,
+        ... )
+        >>> warmup['total_trading_days']
+        434  # 253 + 60 + 60 + 1 + 60
     """
-    # Sequential warmup calculation (in trading days)
-    # Components run in sequence: strategy → allocator → vol targeting
-    strategy_warmup_days = strategy_warmup
-    inverse_vol_warmup = vol_window
-    first_return_day = 1  # Day when first portfolio return is generated
+    # Calculate strategy warmup using helper function
+    strategy_warmup_days = calculate_strategy_warmup(strategies)
+    
+    # Calculate meta allocator warmup using helper function
+    num_strategies = len(strategies) if strategies else 0
+    meta_allocator_warmup_days = calculate_meta_allocator_warmup(
+        meta_allocator, num_strategies
+    )
+    
+    # Asset allocator warmup (inverse vol)
+    asset_allocator_warmup = vol_window
+    
+    # First return day
+    first_return_day = 1
+    
+    # Vol targeting warmup
     vol_targeting_warmup = vol_lookback
     
+    # Total warmup (sequential)
     total_trading_days = (
         strategy_warmup_days + 
-        inverse_vol_warmup + 
+        meta_allocator_warmup_days +
+        asset_allocator_warmup + 
         first_return_day + 
         vol_targeting_warmup
     )
     
+    # Build description
+    parts = []
+    if strategy_warmup_days > 0:
+        parts.append(f"Strategy ({strategy_warmup_days}d)")
+    if meta_allocator_warmup_days > 0:
+        parts.append(f"Meta allocator ({meta_allocator_warmup_days}d)")
+    parts.append(f"Asset allocator ({asset_allocator_warmup}d)")
+    parts.append(f"First return ({first_return_day}d)")
+    parts.append(f"Vol targeting ({vol_targeting_warmup}d)")
+    
+    description = " + ".join(parts) + f" = {total_trading_days} trading days"
+    
     return {
+        "strategy_warmup": strategy_warmup_days,
+        "meta_allocator_warmup": meta_allocator_warmup_days,
+        "asset_allocator_warmup": asset_allocator_warmup,
+        "first_return": first_return_day,
+        "vol_targeting_warmup": vol_targeting_warmup,
         "total_trading_days": total_trading_days,
-        "components": {
-            "strategy": strategy_warmup_days,
-            "inverse_vol": inverse_vol_warmup,
-            "first_return": first_return_day,
-            "vol_targeting": vol_targeting_warmup,
-        },
-        "description": (
-            f"Strategy ({strategy_warmup_days}d) + "
-            f"Inverse vol ({inverse_vol_warmup}d) + "
-            f"First return (1d) + "
-            f"Vol targeting ({vol_targeting_warmup}d) = "
-            f"{total_trading_days} trading days"
-        )
+        "description": description,
     }

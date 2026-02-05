@@ -153,13 +153,22 @@ class TrendStrategy(Strategy):
         """
         Return required warmup period.
         
-        Warmup = max of all indicator lookbacks to ensure all have valid data.
+        Warmup ensures the first valid strategy return is available.
+        
+        - Momentum uses pct_change(lookback), first valid at index = lookback
+        - SMA/Breakout use rolling windows, first valid at index = period - 1
+        - Returns use a 1-day signal lag (signals.shift(1))
+        
+        So the earliest valid return index is:
+            max(momentum_lookback, sma_long - 1, breakout_period - 1) + 1
+        which simplifies to:
+            max(momentum_lookback + 1, sma_long, breakout_period)
         
         Returns:
             Warmup period in trading days
         """
         return max(
-            self.params["momentum_lookback"],
+            self.params["momentum_lookback"] + 1,
             self.params["sma_long"],  # Long SMA is the longest MA
             self.params["breakout_period"],
         )
