@@ -1,11 +1,13 @@
 """Tests for Streamlit app configuration."""
 
 import pytest
-from app.config.defaults import (
+from app.components.universe import (
     AVAILABLE_TICKERS,
     DEFAULT_UNIVERSE,
-    BOUNDS,
 )
+from app.components.risk import BOUNDS as RISK_BOUNDS
+from app.components.strategies import BOUNDS as STRAT_BOUNDS
+from app.components.meta import BOUNDS as META_BOUNDS
 
 
 def test_available_tickers():
@@ -25,7 +27,8 @@ def test_default_universe():
 
 def test_bounds_structure():
     """Test parameter bounds are correctly defined."""
-    required_params = [
+    # Check Risk Bounds
+    risk_params = [
         "max_weight_per_asset",
         "max_sector_weight",
         "min_assets_held",
@@ -36,22 +39,29 @@ def test_bounds_structure():
         "vol_window",
     ]
     
-    for param in required_params:
-        assert param in BOUNDS
-        assert len(BOUNDS[param]) == 2
-        assert BOUNDS[param][0] < BOUNDS[param][1]  # min < max
+    for param in risk_params:
+        assert param in RISK_BOUNDS
+        assert len(RISK_BOUNDS[param]) == 2
+        assert RISK_BOUNDS[param][0] < RISK_BOUNDS[param][1]
+
+    # Check Strategy Bounds
+    assert "trend_lookback" in STRAT_BOUNDS
+    assert "meanrev_lookback" in STRAT_BOUNDS
+    
+    # Check Meta Bounds
+    assert "meta_vol_lookback" in META_BOUNDS
 
 
 def test_bounds_values():
     """Test that bounds are reasonable."""
     # Max weight per asset should be between 0 and 1
-    assert 0 < BOUNDS["max_weight_per_asset"][0] <= 1
-    assert 0 < BOUNDS["max_weight_per_asset"][1] <= 1
+    assert 0 < RISK_BOUNDS["max_weight_per_asset"][0] <= 1
+    assert 0 < RISK_BOUNDS["max_weight_per_asset"][1] <= 1
     
     # Leverage should be non-negative
-    assert BOUNDS["min_leverage"][0] >= 0
-    assert BOUNDS["max_leverage"][0] > 0
+    assert RISK_BOUNDS["min_leverage"][0] >= 0
+    assert RISK_BOUNDS["max_leverage"][0] > 0
     
     # Lookback periods should be positive
-    assert BOUNDS["vol_lookback"][0] > 0
-    assert BOUNDS["vol_window"][0] > 0
+    assert RISK_BOUNDS["vol_lookback"][0] > 0
+    assert RISK_BOUNDS["vol_window"][0] > 0

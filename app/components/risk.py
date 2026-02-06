@@ -1,0 +1,182 @@
+"""Risk caps and volatility targeting component."""
+
+import streamlit as st
+from typing import List
+
+from app.utils.validators import validate_risk_caps_widget, validate_volatility_targeting_widget
+
+# ==================== DEFAULTS ====================
+DEFAULT_MAX_WEIGHT_PER_ASSET = 0.25
+DEFAULT_MAX_SECTOR_WEIGHT = 0.6
+DEFAULT_MIN_ASSETS_HELD = 1
+DEFAULT_TARGET_VOL = 0.10
+DEFAULT_VOL_LOOKBACK = 60
+DEFAULT_MIN_LEVERAGE = 0.0
+DEFAULT_MAX_LEVERAGE = 2.0
+
+BOUNDS = {
+    "max_weight_per_asset": (0.05, 1.0),
+    "max_sector_weight": (0.1, 1.0),
+    "min_assets_held": (1, 10),
+    "target_vol": (0.01, 0.50),
+    "vol_lookback": (10, 252),
+    "min_leverage": (0.0, 3.0),
+    "max_leverage": (0.5, 5.0),
+}
+
+
+def render(universe: List[str]) -> dict:
+    """
+    Render risk caps and volatility targeting UI.
+    
+    Args:
+        universe: List of selected assets (for validation)
+        
+    Returns:
+        dict with keys:
+            - max_weight_per_asset: float
+            - max_sector_weight: float or None
+            - min_assets_held: int
+            - cap_mode: str
+            - target_vol: float
+            - vol_lookback: int
+            - min_leverage: float
+            - max_leverage: float
+            - errors: list of validation error strings
+    """
+    errors = []
+    
+    # ==================== RISK CAPS ====================
+    with st.sidebar.expander("Risk Caps", expanded=False):
+        # Cap Mode Selector
+        st.markdown("**Risk Cap Enforcement Mode**")
+        cap_mode = st.radio(
+            "When to apply risk caps:",
+            options=["both", "pre_leverage", "post_leverage"],
+            index=0,
+            help="Controls when risk caps are enforced relative to volatility targeting",
+            format_func=lambda x: {
+                "both": "Both (Before & After Leverage) - Most Conservative",
+                "pre_leverage": "Pre-Leverage Only (Caps before vol targeting)",
+                "post_leverage": "Post-Leverage Only (Caps after vol targeting)"
+            }[x]
+        )
+        
+        # Show explanation based on selected mode
+        if cap_mode == "both":
+            st.info("ℹ️ Caps applied before and after vol targeting. Most conservative - ensures limits never violated.")
+        elif cap_mode == "pre_leverage":
+            st.warning("⚠️ Caps only before leverage. Final weights may exceed caps (e.g., 25% → 50% at 2× leverage).")
+        else:
+            st.warning("⚠️ Caps only after leverage. Pre-leverage weights may exceed caps before scaling.")
+        
+        # Risk Cap Parameters
+        max_weight_per_asset = st.slider(
+            "Max Weight per Asset",
+            min_value=BOUNDS["max_weight_per_asset"][0],
+            max_value=BOUNDS["max_weight_per_asset"][1],
+            value=DEFAULT_MAX_WEIGHT_PER_ASSET,
+            step=0.05,
+            format="%.2f",
+            help="Maximum allocation to any single asset (e.g., 0.25 = 25%)"
+        )
+        
+        use_sector_cap = st.checkbox(
+            "Enable Sector Weight Cap",
+            value=False,
+            help="Limit total exposure to any sector"
+        )
+        
+        if use_sector_cap:
+            max_sector_weight = st.slider(
+                "Max Sector Weight",
+                min_value=BOUNDS["max_sector_weight"][0],
+                max_value=BOUNDS["max_sector_weight"][1],
+                value=DEFAULT_MAX_SECTOR_WEIGHT,
+                step=0.05,
+                format="%.2f",
+                help="Maximum allocation to any sector (e.g., 0.6 = 60%)"
+            )
+        else:
+            max_sector_weight = None
+        
+        min_assets_held = st.number_input(
+            "Min Assets Held",
+            min_value=BOUNDS["min_assets_held"][0],
+            max_value=BOUNDS["min_assets_held"][1],
+            value=DEFAULT_MIN_ASSETS_HELD,
+            step=1,
+            help="Minimum number of assets to hold in the portfolio"
+        )
+        
+        risk_caps_errors = validate_risk_caps_widget(
+            min_assets_held=min_assets_held,
+            universe=universe,
+            max_weight_per_asset=max_weight_per_asset,
+            max_sector_weight=max_sector_weight,
+        )
+        if risk_caps_errors:
+            for error in risk_caps_errors:
+                st.error(f"⚠️ {error}")
+            errors.extend(risk_caps_errors)
+    
+    # ==================== VOLATILITY TARGETING ====================
+    with st.sidebar.expander("Volatility Targeting", expanded=False):
+        target_vol = st.slider(
+            "Target Volatility",
+            min_value=BOUNDS["target_vol"][0],
+            max_value=BOUNDS["target_vol"][1],
+            value=DEFAULT_TARGET_VOL,
+            step=0.01,
+            format="%.2f",
+            help="Target annual volatility (e.g., 0.10 = 10% annualized)"
+        )
+        
+        vol_lookback = st.slider(
+            "Vol Lookback (trading days)",
+            min_value=BOUNDS["vol_lookback"][0],
+            max_value=BOUNDS["vol_lookback"][1],
+            value=DEFAULT_VOL_LOOKBACK,
+            step=10,
+            help="Rolling window for volatility calculation in trading days"
+        )
+        
+        col1, col2 = st.columns(2)
+        
+        min_leverage = col1.number_input(
+            "Min Leverage",
+            min_value=BOUNDS["min_leverage"][0],
+            max_value=BOUNDS["min_leverage"][1],
+            value=DEFAULT_MIN_LEVERAGE,
+            step=0.1,
+            format="%.1f",
+            help="Minimum portfolio leverage"
+        )
+        
+        max_leverage = col2.number_input(
+            "Max Leverage",
+            min_value=BOUNDS["max_leverage"][0],
+            max_value=BOUNDS["max_leverage"][1],
+            value=DEFAULT_MAX_LEVERAGE,
+            step=0.1,
+            format="%.1f",
+            help="Maximum portfolio leverage"
+        )
+        
+        volatility_errors = validate_volatility_targeting_widget(min_leverage, max_leverage)
+        if volatility_errors:
+            for error in volatility_errors:
+                st.error(f"⚠️ {error}")
+            errors.extend(volatility_errors)
+    
+    return {
+        'max_weight_per_asset': max_weight_per_asset,
+        'max_sector_weight': max_sector_weight,
+        'min_assets_held': min_assets_held,
+        'cap_mode': cap_mode,
+        'target_vol': target_vol,
+        'vol_lookback': vol_lookback,
+        'min_leverage': min_leverage,
+        'max_leverage': max_leverage,
+        'errors': errors,
+    }
