@@ -1,6 +1,6 @@
 """Asset allocator selection component."""
 
-from typing import Dict
+from typing import Dict, Optional
 
 import streamlit as st
 
@@ -13,7 +13,11 @@ from app.portfolio_allocator_ui.registry import (
 DEFAULT_ALLOCATOR_TYPE = "inverse_vol_v1"
 
 
-def render() -> Dict:
+def render(
+    key_prefix: str = "",
+    container: Optional[st.delta_generator.DeltaGenerator] = None,
+    show_header: bool = True,
+) -> Dict:
     """
     Render asset allocator UI.
 
@@ -23,11 +27,13 @@ def render() -> Dict:
             - vol_window: int (compatibility with current engine)
             - errors: list of validation error strings
     """
+    container = container or st.sidebar
     errors = []
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Asset Allocator")
-    st.sidebar.caption("Controls allocation across assets")
+    if show_header:
+        container.markdown("---")
+        container.markdown("### Asset Allocator")
+        container.caption("Controls allocation across assets")
 
     allocator_options = list(PORTFOLIO_ALLOCATOR_SPECS.keys())
     format_func = lambda x: get_portfolio_allocator_spec(x).display_name
@@ -36,30 +42,33 @@ def render() -> Dict:
     if DEFAULT_ALLOCATOR_TYPE in allocator_options:
         default_index = allocator_options.index(DEFAULT_ALLOCATOR_TYPE)
 
-    allocator_type = st.sidebar.radio(
+    allocator_type = container.radio(
         "Allocation Method",
         options=allocator_options,
         index=default_index,
         format_func=format_func,
         help="Method for allocating across assets",
+        key=f"{key_prefix}asset_allocator_type",
     )
 
-    with st.sidebar.expander("Asset Allocator Parameters", expanded=False):
+    expander = container.expander("Asset Allocator Parameters", expanded=False)
+    with expander:
         spec = get_portfolio_allocator_spec(allocator_type)
         if spec.description:
-            st.caption(spec.description)
+            expander.caption(spec.description)
 
         params = {}
         if spec.render_params is not None:
-            params = spec.render_params(key_prefix=f"allocator_{allocator_type}_")
+            params = spec.render_params(key_prefix=f"{key_prefix}allocator_{allocator_type}_")
         else:
-            st.caption("_No parameters_")
+            expander.caption("_No parameters_")
 
     vol_window = params.get("lookback")
     if vol_window is None:
         vol_window = params.get("vol_window")
 
-    st.sidebar.markdown("---")
+    if show_header:
+        container.markdown("---")
     
     return {
         "asset_allocator": {

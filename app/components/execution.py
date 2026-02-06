@@ -23,7 +23,7 @@ def render(errors: List[str]) -> bool:
     
     if has_errors:
         st.sidebar.button(
-            "🚀 Run Backtest",
+            "🚀 Run Backtests",
             type="primary",
             width='stretch',
             disabled=True,
@@ -34,10 +34,10 @@ def render(errors: List[str]) -> bool:
         return False
     else:
         run_clicked = st.sidebar.button(
-            "🚀 Run Backtest",
+            "🚀 Run Backtests",
             type="primary",
             width='stretch',
-            help="Run backtest with current parameters",
+            help="Run backtests with current parameters",
             key="run_backtest"
         )
         return run_clicked

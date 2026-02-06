@@ -2,6 +2,7 @@
 
 import streamlit as st
 from sage_core.strategies import STRATEGY_REGISTRY
+from typing import Optional
 
 from app.strategy_ui.registry import get_strategy_spec
 
@@ -9,7 +10,11 @@ from app.strategy_ui.registry import get_strategy_spec
 DEFAULT_STRATEGIES = ['passthrough']
 
 
-def render() -> dict:
+def render(
+    key_prefix: str = "",
+    container: Optional[st.delta_generator.DeltaGenerator] = None,
+    show_header: bool = True,
+) -> dict:
     """
     Render strategy selection UI.
     
@@ -18,53 +23,61 @@ def render() -> dict:
             - strategies: dict mapping strategy name to config {'params': {...}}
             - errors: list of validation error strings
     """
+    container = container or st.sidebar
     errors = []
     
     # ==================== STRATEGY SELECTION ====================
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Strategy Selection")
+    if show_header:
+        container.markdown("---")
+        container.markdown("### Strategy Selection")
     
     # Get display names for multiselect
     strategy_options = list(STRATEGY_REGISTRY.keys())
     format_func = lambda x: get_strategy_spec(x).display_name
     
-    selected_strategies = st.sidebar.multiselect(
+    selected_strategies = container.multiselect(
         "Select Strategies",
         options=strategy_options,
         default=DEFAULT_STRATEGIES,
         format_func=format_func,
-        help="Choose one or more strategies. Multiple strategies will be combined using a meta allocator."
+        help="Choose one or more strategies. Multiple strategies will be combined using a meta allocator.",
+        key=f"{key_prefix}strategies",
     )
     
     # Validate at least one strategy selected
     if not selected_strategies:
-        st.sidebar.error("⚠️ Select at least one strategy")
+        container.error("⚠️ Select at least one strategy")
         errors.append("At least one strategy must be selected")
     
     # ==================== STRATEGY PARAMETERS ====================
     strategies_config = {}
 
     if selected_strategies:
-        st.sidebar.markdown("#### Strategy Parameters")
+        container.markdown("#### Strategy Parameters")
 
     for strategy_name in selected_strategies:
         spec = get_strategy_spec(strategy_name)
 
-        with st.sidebar.expander(f"{spec.display_name} Parameters", expanded=False):
+        expander = container.expander(f"{spec.display_name} Parameters", expanded=False)
+        with expander:
             if spec.description:
-                st.caption(spec.description)
-            params = spec.render_params(key_prefix=f"{strategy_name}_")
+                expander.caption(spec.description)
+            if spec.render_params is not None:
+                params = spec.render_params(key_prefix=f"{key_prefix}{strategy_name}_")
+            else:
+                expander.caption("_No parameters_")
+                params = {}
         strategies_config[strategy_name] = {'params': params}
 
     if selected_strategies:
         if len(selected_strategies) == 1:
-            st.sidebar.info(f"ℹ️ Single strategy: **{format_func(selected_strategies[0])}**")
+            container.info(f"ℹ️ Single strategy: **{format_func(selected_strategies[0])}**")
         else:
             if 'passthrough' in selected_strategies:
-                st.sidebar.error("⚠️ Passthrough strategy cannot be combined with other strategies")
+                container.error("⚠️ Passthrough strategy cannot be combined with other strategies")
                 errors.append("Passthrough strategy cannot be combined with other strategies")
             else:
-                st.sidebar.info(f"ℹ️ {len(selected_strategies)} strategies selected - meta allocator will combine them")
+                container.info(f"ℹ️ {len(selected_strategies)} strategies selected - meta allocator will combine them")
 
     
     return {

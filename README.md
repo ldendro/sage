@@ -57,77 +57,45 @@ Streamlit-based interactive research interface:
 
 ## Development Status
 
-**Current Phase**: Phase 3 - Cycle 1 (Foundation)  
-**Current Focus**: Meta Allocation Layer (3C)
+**Current Phase**: Phase 1.2 - Strategy Architecture & Data Integrity  
+**Goal**: Ensuring reproducible, clean data generation for ML systems.
 
-### Completed
-- [x] **Phase 0**: Repository structure, packaging, core models
-- [x] **Phase 1**: Basic engine with inverse-vol allocator
-- [x] **Phase 2**: Professional Streamlit UI with multi-tab analytics
-- [x] **Phase 3A**: Core system (real data, warmup, risk caps)
-- [x] **Phase 3B**: Strategy framework (Trend, Mean Reversion)
+### Completed (Phase 1.1)
+- [x] **Simulation Engine**: Hybrid Event-Driven/Vectorized architecture
+- [x] **Walk-Forward Validation**: Cross-validation engine working
+- [x] **Visualization**: Streamlit analytics dashboard
 
-### Phase 3: Research Platform - Iterative Cycles
+### Roadmap: ML Systems Research Platform
 
-**Approach**: Cyclic development across all system layers
+Sage is an engineering-first research platform for ML-driven quantitative finance.
+See `docs/ROADMAP.md` for the detailed execution plan.
 
-#### Cycle 1: Foundation (Current - 4-6 weeks)
-**Goal**: Complete minimum viable research platform
+- [ ] **Phase 1**: Core Simulation & Evaluation Foundation (Current)
+  - Strategy Warmup Masking (In Progress)
+  - Cost & Friction Modeling (Pending)
+  - Convex Optimization (`cvxpy` integration)
+  - Baseline & Evaluation Framework
 
-- [x] **3A-3B**: Core system + Strategies ✅
-- [ ] **3C**: Meta Allocation Layer (Current)
-  - Strategy warmup masking
-  - Meta allocator framework
-  - Fixed Weight + Risk Parity meta allocators
-  - Engine and UI integration
-- [ ] **3D**: Asset Allocator Suite
-  - Minimum Variance allocator
-  - Risk Parity allocator (asset-level)
-- [ ] **3E**: Transaction Costs
-  - Cost framework (commissions, spread)
-  - Engine integration
+- [ ] **Phase 2**: Data Modeling & Representation
+  - Feature Store & Data Abstractions
+  - Target & Label Engineering (Triple-Barrier Method)
+  - Stationarity Transformations
 
-**Cycle 1 Deliverable**: Production-ready research platform
+- [ ] **Phase 3**: Model-Driven Decision Systems
+  - Scikit-Learn Integration (Random Forest, XGBoost)
+  - Experiment Tracking (MLflow/W&B)
+  - Error Analysis & Drift Diagnostics
 
-#### Cycle 2: Enhancement (Future - can run parallel to Phase 4)
-- Additional strategies (Carry, Value, Statistical Arbitrage)
-- Regime detection and strategy gating
-- Advanced meta allocation methods
-- Risk contribution analytics
-- UI polish and advanced visualizations
+- [ ] **Phase 4**: Advanced Deep Learning & RL
+  - PyTorch Sequence Models (LSTM/Transformer)
+  - Reinforcement Learning Agents (PPO/SAC)
 
-#### Cycle 3: Optimization (Future - can run parallel to Phase 5)
-- Performance optimization (10x improvement)
-- Scalability (100+ assets)
-- Parameter optimization framework
-- Research workflow tools
+**Immedate Priorities**:
+1. Strategy Warmup Masking (Data Integrity)
+2. Transaction Cost Modeling (RL Environment)
+3. Mean-Variance Optimizer (Math Foundation)
 
-**Key Insight**: Complete Cycle 1, then iterate on Cycles 2-3 while building live trading infrastructure (Phase 4+)
-
-### Roadmap to Live Trading
-
-- [ ] **Phase 4** (2-3 months): Pre-Live Trading Infrastructure
-  - Paper trading engine
-  - Real-time data integration
-  - Risk monitoring system
-  - *Can run parallel to Cycle 2*
-
-- [ ] **Phase 5** (1-2 months): Broker Integration
-  - Broker abstraction layer (Alpaca, IB)
-  - Order execution engine
-  - Paper trading validation
-  - *Can run parallel to Cycle 3*
-
-- [ ] **Phase 6** (1-2 months): Live Trading Launch
-  - Pre-launch validation
-  - Soft launch → Full deployment
-  - *Cycles 2-3 continue as ongoing improvements*
-
-**Timeline**: 
-- Cycle 1: 4-6 weeks
-- Phase 4-6: 12-18 months (with Cycles 2-3 in parallel)
-
-See `docs/PHASE_3_PLAN.md` for detailed cycle breakdown.
+See `docs/ROADMAP.md` for details.
 
 ---
 

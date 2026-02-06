@@ -1,7 +1,7 @@
 """Meta allocator selection component."""
 
 import streamlit as st
-from typing import List
+from typing import List, Optional
 from sage_core.meta import META_ALLOCATOR_REGISTRY
 
 from app.meta_allocator_ui.registry import get_meta_allocator_spec
@@ -10,7 +10,12 @@ from app.meta_allocator_ui.registry import get_meta_allocator_spec
 DEFAULT_META_ALLOCATOR_TYPE = 'fixed_weight'
 
 
-def render(selected_strategies: List[str]) -> dict:
+def render(
+    selected_strategies: List[str],
+    key_prefix: str = "",
+    container: Optional[st.delta_generator.DeltaGenerator] = None,
+    show_header: bool = True,
+) -> dict:
     """
     Render meta allocator UI.
     
@@ -24,6 +29,7 @@ def render(selected_strategies: List[str]) -> dict:
             - meta_allocator: dict with 'type' and 'params', or None for single strategy
             - errors: list of validation error strings
     """
+    container = container or st.sidebar
     errors = []
     
     # Single strategy - no meta allocator needed
@@ -34,9 +40,10 @@ def render(selected_strategies: List[str]) -> dict:
         }
     
     # ==================== META ALLOCATOR ====================
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Meta Allocator")
-    st.sidebar.caption("Combines returns from multiple strategies")
+    if show_header:
+        container.markdown("---")
+        container.markdown("### Meta Allocator")
+        container.caption("Combines returns from multiple strategies")
     
     # Allocator type selector
     allocator_options = list(META_ALLOCATOR_REGISTRY.keys())
@@ -46,36 +53,38 @@ def render(selected_strategies: List[str]) -> dict:
     if DEFAULT_META_ALLOCATOR_TYPE in allocator_options:
         default_index = allocator_options.index(DEFAULT_META_ALLOCATOR_TYPE)
     
-    allocator_type = st.sidebar.radio(
+    allocator_type = container.radio(
         "Allocation Method",
         options=allocator_options,
         index=default_index,
         format_func=format_func,
-        help="Method for combining strategy returns"
+        help="Method for combining strategy returns",
+        key=f"{key_prefix}meta_allocator_type",
     )
     
     # ==================== ALLOCATOR PARAMETERS ====================
     meta_allocator_config = None
     
-    with st.sidebar.expander("Meta Allocator Parameters", expanded=True):
+    expander = container.expander("Meta Allocator Parameters", expanded=True)
+    with expander:
         spec = get_meta_allocator_spec(allocator_type)
         if spec.description:
-            st.caption(spec.description)
+            expander.caption(spec.description)
 
         params = {}
         if spec.render_params is not None:
             params = spec.render_params(
-                key_prefix=f"meta_{allocator_type}_",
+                key_prefix=f"{key_prefix}meta_{allocator_type}_",
                 selected_strategies=selected_strategies,
             )
         else:
-            st.caption("_No parameters_")
+            expander.caption("_No parameters_")
 
         if allocator_type == 'fixed_weight':
             weights = params.get('weights', {})
             total = sum(weights.values())
             if abs(total - 1.0) > 0.01:
-                st.error(f"⚠️ Weights must sum to 100% (currently {total:.0%})")
+                expander.error(f"⚠️ Weights must sum to 100% (currently {total:.0%})")
                 errors.append(f"Strategy weights must sum to 100% (currently {total:.0%})")
 
         meta_allocator_config = {
