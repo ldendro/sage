@@ -158,8 +158,10 @@ def run_system_walkforward(
             allocator = get_meta_allocator('fixed_weight', {'weights': weights})
             logger.info(f"Using default FixedWeightAllocator with equal weights")
         else:
-            allocator = get_meta_allocator(meta_allocator['type'], meta_allocator['params'])
-            logger.info(f"Using {meta_allocator['type']} meta allocator")
+            allocator_type = meta_allocator.get('type') if meta_allocator else None
+            params = meta_allocator.get('params', {}) if meta_allocator else {}
+            allocator = get_meta_allocator(allocator_type, params)
+            logger.info(f"Using {allocator_type} meta allocator")
         
         # Combine returns for each asset
         combined_data = {}
