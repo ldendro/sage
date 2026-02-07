@@ -64,9 +64,7 @@ def render(
         else:
             expander.caption("_No parameters_")
 
-    vol_window = params.get("lookback")
-    if vol_window is None:
-        vol_window = params.get("vol_window")
+    vol_window = params.get("lookback") or params.get("vol_window")
 
     if show_header:
         container.markdown("---")
