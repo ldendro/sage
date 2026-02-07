@@ -40,11 +40,7 @@ def render(
         }
     
     # ==================== META ALLOCATOR ====================
-    if show_header:
-        container.markdown("---")
-        container.markdown("### Meta Allocator")
-        container.caption("Combines returns from multiple strategies")
-    
+
     # Allocator type selector
     allocator_options = list(META_ALLOCATOR_REGISTRY.keys())
     format_func = lambda x: get_meta_allocator_spec(x).display_name

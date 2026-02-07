@@ -1,5 +1,6 @@
 """Results display component."""
 
+import html
 import streamlit as st
 import pandas as pd
 import json
@@ -10,11 +11,8 @@ from app.utils.formatters import (
     format_percentage,
     format_ratio,
     format_days,
-    format_date,
 )
 from app.utils.charts import (
-    create_equity_curve_chart,
-    create_drawdown_chart,
     create_weight_allocation_chart,
     create_multi_equity_curve_chart,
     create_multi_drawdown_chart,
@@ -71,44 +69,15 @@ def render_error(error_msg: str) -> None:
         st.code(error_msg)
 
 
-def render_success(results: dict) -> None:
-    """Render success message and warmup info."""
-    warmup_info = results.get("warmup_info", {})
-    st.success(f"✅ Backtest completed successfully! (Warmup: {warmup_info.get('total_trading_days', 0)} trading days)")
-    
-    with st.expander("ℹ️ About Warmup Period", expanded=False):
-        total_trading = warmup_info.get("total_trading_days", 0)
-        
-        st.markdown(f"""
-        **Warmup Period:** {total_trading} trading days
-        
-        {warmup_info.get("description", "N/A")}
-        
-        **Sequential Breakdown:**
-        1. **Strategy Warmup:** {warmup_info.get('strategy_warmup', 0)} days
-        2. **Meta Allocator Warmup:** {warmup_info.get('meta_allocator_warmup', 0)} days
-        3. **Inverse Vol Warmup:** {warmup_info.get('asset_allocator_warmup', 0)} days
-           - Needed to calculate first weights
-        4. **First Portfolio Return:** {warmup_info.get('first_return', 1)} day
-           - Day when first weights are applied
-        5. **Vol Targeting Warmup:** {warmup_info.get('vol_targeting_warmup', 0)} days  
-           - Needed to accumulate portfolio returns for vol targeting
-        
-        **Total:** {total_trading} trading days (system fully active after this)
-        
-        **During warmup:**
-        - Data is loaded but not included in final results
-        - Portfolio uses 1.0x leverage (no vol targeting)
-        - Equity curve starts exactly at your specified start date
-        """)
 
 
 def _color_label_html(name: str, color: str) -> str:
+    safe_name = html.escape(name)
     return (
         "<div style='display:flex;align-items:center;gap:8px;font-weight:600;'>"
         f"<span style='width:12px;height:12px;border-radius:3px;display:inline-block;"
         f"background:{color};'></span>"
-        f"<span>{name}</span>"
+        f"<span>{safe_name}</span>"
         "</div>"
     )
 
@@ -139,23 +108,6 @@ def _build_display_names(portfolios: List[dict]) -> Dict[str, str]:
         else:
             name_map[portfolio["id"]] = name
     return name_map
-
-
-def render_portfolio_legend(portfolios: List[dict], name_map: Dict[str, str]) -> None:
-    if not portfolios:
-        return
-
-    items = []
-    for portfolio in portfolios:
-        items.append(
-            f"<span style='display:inline-flex;align-items:center;gap:6px;margin-right:14px;'>"
-            f"<span style='width:10px;height:10px;border-radius:3px;display:inline-block;"
-            f"background:{portfolio['color']};'></span>"
-            f"<span style='font-size:0.9rem;'>{name_map[portfolio['id']]}</span>"
-            "</span>"
-        )
-
-    st.markdown("".join(items), unsafe_allow_html=True)
 
 
 def render_performance_tab(
@@ -390,6 +342,7 @@ def render_metadata_tab(
         if warmup:
             warmup_rows.append({
                 "Portfolio": name_map[portfolio["id"]],
+                "Warmup Start Date": result.get("warmup_start_date", "N/A"),
                 "Total Warmup": format_days(warmup.get("total_trading_days", 0)),
                 "Strategy Warmup": format_days(warmup.get("strategy_warmup", 0)),
                 "Meta Allocator Warmup": format_days(warmup.get("meta_allocator_warmup", 0)),
@@ -468,9 +421,6 @@ def render(
 
     if results_by_id:
         st.success(f"Completed {len(results_by_id)} portfolio(s).")
-    if display_portfolios:
-        render_portfolio_legend(display_portfolios, name_map)
-
     if errors_by_id:
         st.warning("Some portfolios failed. Review errors below.")
         known_ids = {p["id"] for p in display_portfolios}

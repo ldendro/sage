@@ -3,6 +3,8 @@
 import streamlit as st
 import sys
 import logging
+import hashlib
+import json
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent
@@ -10,7 +12,7 @@ sys.path.insert(0, str(project_root))
 
 # Import components
 from app.components.header import render_header
-from app.components import universe, portfolios, execution, results
+from app.components import universe, portfolios, execution, results, education
 from sage_core.walkforward.engine import run_system_walkforward
 
 # Configure logging
@@ -65,6 +67,17 @@ def main():
     execution.render_advanced_settings()
     
     # ==================== BACKTEST EXECUTION ====================
+    def _config_signature() -> str:
+        payload = {
+            "universe": univ_config,
+            "portfolios": portfolio_state.get("configs", {}),
+        }
+        return hashlib.md5(
+            json.dumps(payload, sort_keys=True, default=str).encode("utf-8")
+        ).hexdigest()
+
+    current_signature = _config_signature()
+
     if run_clicked and not all_errors:
         # Build composite config
         with st.spinner("Running backtest... This may take a moment."):
@@ -113,6 +126,7 @@ def main():
                 st.session_state.portfolio_results = portfolio_results
                 st.session_state.portfolio_configs = portfolio_configs
                 st.session_state.portfolio_errors = portfolio_errors
+                st.session_state.last_run_signature = current_signature
                 
             except Exception as e:
                 logger.error(f"Backtest failed: {str(e)}", exc_info=True)
@@ -120,15 +134,23 @@ def main():
                 st.session_state.portfolio_errors = {"system": str(e)}
 
     # ==================== RESULTS DISPLAY ====================
-    if st.session_state.portfolio_results or st.session_state.portfolio_errors:
+    has_results = bool(st.session_state.portfolio_results or st.session_state.portfolio_errors)
+    if not has_results:
+        education.render(
+            portfolio_state["portfolios"],
+            portfolio_state["configs"],
+            portfolio_state.get("active_portfolio_id"),
+            portfolio_state.get("active_layer_label"),
+        )
+    else:
+        if st.session_state.get("last_run_signature") != current_signature:
+            st.warning("Settings have changed since the last run. Results may be out of date.")
         results.render(
             st.session_state.portfolio_results,
             st.session_state.portfolio_configs,
             portfolio_state['portfolios'],
             st.session_state.portfolio_errors,
         )
-    else:
-        st.info("👈 Configure parameters in the sidebar and click 'Run Backtest' to begin")
 
     # Footer
     st.markdown("---")

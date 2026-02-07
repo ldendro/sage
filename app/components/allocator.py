@@ -17,6 +17,7 @@ def render(
     key_prefix: str = "",
     container: Optional[st.delta_generator.DeltaGenerator] = None,
     show_header: bool = True,
+    expand_params: bool = False,
 ) -> Dict:
     """
     Render asset allocator UI.
@@ -51,7 +52,7 @@ def render(
         key=f"{key_prefix}asset_allocator_type",
     )
 
-    expander = container.expander("Asset Allocator Parameters", expanded=False)
+    expander = container.expander("Asset Allocator Parameters", expanded=expand_params)
     with expander:
         spec = get_portfolio_allocator_spec(allocator_type)
         if spec.description:

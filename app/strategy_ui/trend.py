@@ -23,6 +23,15 @@ COMBINATION_METHODS = [
     ("weighted", "Weighted blend"),
 ]
 
+def _clamp_state(key: str, min_value: float, max_value: float) -> None:
+    if key not in st.session_state:
+        return
+    value = st.session_state[key]
+    if value < min_value:
+        st.session_state[key] = min_value
+    elif value > max_value:
+        st.session_state[key] = max_value
+
 
 def render_params(key_prefix: str) -> Dict[str, Any]:
     """Render Trend strategy parameters and return params dict."""
@@ -53,6 +62,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         sma_long_default = sma_long_min
     if sma_long_default > sma_long_max:
         sma_long_default = sma_long_max
+    _clamp_state(f"{key_prefix}sma_long", sma_long_min, sma_long_max)
 
     sma_long = st.slider(
         "Long SMA (days)",
@@ -95,6 +105,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         st.markdown("**Weights (sum to 1)**")
         weight_step = BOUNDS["weight_step"]
 
+        _clamp_state(f"{key_prefix}weight_momentum", 0.0, 1.0)
         weight_momentum = st.slider(
             "Momentum weight",
             min_value=0.0,
@@ -109,14 +120,21 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         if default_ma_weight > max_ma_weight:
             default_ma_weight = max_ma_weight
 
-        weight_ma = st.slider(
-            "MA weight",
-            min_value=0.0,
-            max_value=max_ma_weight,
-            value=default_ma_weight,
-            step=weight_step,
-            key=f"{key_prefix}weight_ma",
-        )
+        if max_ma_weight <= 0.0:
+            _clamp_state(f"{key_prefix}weight_ma", 0.0, 0.0)
+            weight_ma = 0.0
+            st.caption(f"MA weight (computed): {weight_ma:.2f}")
+
+        else:
+            _clamp_state(f"{key_prefix}weight_ma", 0.0, max_ma_weight)
+            weight_ma = st.slider(
+                "MA weight",
+                min_value=0.0,
+                max_value=max_ma_weight,
+                value=default_ma_weight,
+                step=weight_step,
+                key=f"{key_prefix}weight_ma",
+            )
 
         weight_breakout = max(0.0, 1.0 - weight_momentum - weight_ma)
         st.caption(f"Breakout weight (computed): {weight_breakout:.2f}")

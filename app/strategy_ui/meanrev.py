@@ -26,6 +26,15 @@ COMBINATION_METHODS = [
     ("weighted", "Weighted blend"),
 ]
 
+def _clamp_state(key: str, min_value: float, max_value: float) -> None:
+    if key not in st.session_state:
+        return
+    value = st.session_state[key]
+    if value < min_value:
+        st.session_state[key] = min_value
+    elif value > max_value:
+        st.session_state[key] = max_value
+
 
 def render_params(key_prefix: str) -> Dict[str, Any]:
     """Render Mean Reversion strategy parameters and return params dict."""
@@ -53,6 +62,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
     rsi_overbought_default = DEFAULTS["rsi_overbought"]
     if rsi_overbought_default < rsi_overbought_min:
         rsi_overbought_default = rsi_overbought_min
+    _clamp_state(f"{key_prefix}rsi_overbought", rsi_overbought_min, BOUNDS["rsi_overbought"][1])
 
     rsi_overbought = st.slider(
         "RSI overbought",
@@ -125,6 +135,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         st.markdown("**Weights (sum to 1)**")
         weight_step = BOUNDS["weight_step"]
 
+        _clamp_state(f"{key_prefix}weight_rsi", 0.0, 1.0)
         weight_rsi = st.slider(
             "RSI weight",
             min_value=0.0,
@@ -139,14 +150,20 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         if default_bb_weight > max_bb_weight:
             default_bb_weight = max_bb_weight
 
-        weight_bb = st.slider(
-            "Bollinger Bands weight",
-            min_value=0.0,
-            max_value=max_bb_weight,
-            value=default_bb_weight,
-            step=weight_step,
-            key=f"{key_prefix}weight_bb",
-        )
+        if max_bb_weight <= 0.0:
+            _clamp_state(f"{key_prefix}weight_bb", 0.0, 0.0)
+            weight_bb = 0.0
+            st.caption(f"Bollinger Bands weight (computed): {weight_bb:.2f}")
+        else:
+            _clamp_state(f"{key_prefix}weight_bb", 0.0, max_bb_weight)
+            weight_bb = st.slider(
+                "Bollinger Bands weight",
+                min_value=0.0,
+                max_value=max_bb_weight,
+                value=default_bb_weight,
+                step=weight_step,
+                key=f"{key_prefix}weight_bb",
+            )
 
         weight_zscore = max(0.0, 1.0 - weight_rsi - weight_bb)
         st.caption(f"Z-Score weight (computed): {weight_zscore:.2f}")
