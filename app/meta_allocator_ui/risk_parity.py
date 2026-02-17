@@ -13,15 +13,16 @@ BOUNDS = {
 }
 
 
-def render_params(key_prefix: str, selected_strategies: List[str]) -> Dict[str, Any]:
+def render_params(key_prefix: str, selected_strategies: List[str], current_values: Dict[str, Any] = None) -> Dict[str, Any]:
     """Render risk parity parameters and return params dict."""
     del selected_strategies
+    cv = current_values or {}
 
     vol_lookback = st.slider(
         "Volatility Lookback (days)",
         min_value=BOUNDS["vol_lookback"][0],
         max_value=BOUNDS["vol_lookback"][1],
-        value=DEFAULTS["vol_lookback"],
+        value=cv.get("vol_lookback", DEFAULTS["vol_lookback"]),
         step=BOUNDS["vol_lookback"][2],
         help="Lookback period for strategy volatility calculation",
         key=f"{key_prefix}vol_lookback",

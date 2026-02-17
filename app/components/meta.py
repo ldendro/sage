@@ -1,7 +1,7 @@
 """Meta allocator selection component."""
 
 import streamlit as st
-from typing import List, Optional
+from typing import Dict, List, Optional
 from sage_core.meta import META_ALLOCATOR_REGISTRY
 
 from app.meta_allocator_ui.registry import get_meta_allocator_spec
@@ -15,6 +15,7 @@ def render(
     key_prefix: str = "",
     container: Optional[st.delta_generator.DeltaGenerator] = None,
     show_header: bool = True,
+    current_values: Dict = None,
 ) -> dict:
     """
     Render meta allocator UI.
@@ -23,6 +24,7 @@ def render(
     
     Args:
         selected_strategies: List of selected strategy names
+        current_values: Dict with 'type' and 'params' from the portfolio config.
         
     Returns:
         dict with keys:
@@ -30,6 +32,7 @@ def render(
             - errors: list of validation error strings
     """
     container = container or st.sidebar
+    cv = current_values or {}
     errors = []
     
     # Single strategy - no meta allocator needed
@@ -45,8 +48,11 @@ def render(
     allocator_options = list(META_ALLOCATOR_REGISTRY.keys())
     format_func = lambda x: get_meta_allocator_spec(x).display_name
 
+    current_type = cv.get("type", DEFAULT_META_ALLOCATOR_TYPE)
     default_index = 0
-    if DEFAULT_META_ALLOCATOR_TYPE in allocator_options:
+    if current_type in allocator_options:
+        default_index = allocator_options.index(current_type)
+    elif DEFAULT_META_ALLOCATOR_TYPE in allocator_options:
         default_index = allocator_options.index(DEFAULT_META_ALLOCATOR_TYPE)
     
     allocator_type = container.radio(
@@ -60,6 +66,7 @@ def render(
     
     # ==================== ALLOCATOR PARAMETERS ====================
     meta_allocator_config = None
+    allocator_params_cv = cv.get("params", {}) if cv.get("type") == allocator_type else {}
     
     expander = container.expander("Meta Allocator Parameters", expanded=True)
     with expander:
@@ -72,6 +79,7 @@ def render(
             params = spec.render_params(
                 key_prefix=f"{key_prefix}meta_{allocator_type}_",
                 selected_strategies=selected_strategies,
+                current_values=allocator_params_cv,
             )
         else:
             expander.caption("_No parameters_")

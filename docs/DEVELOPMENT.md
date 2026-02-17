@@ -26,6 +26,18 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
 
+### Quick Demo Run (Planned — ROADMAP Week 5)
+
+Once the run artifact system is implemented:
+
+```bash
+# Produce a full run artifact end-to-end
+python -m sage_core.scripts.run_demo --config configs/presets/demo.yaml --mode snapshot
+```
+
+This ships with a small demo snapshot (few tickers, short date range) and proves
+"clone → run → verify" in under 60 seconds.
+
 ---
 
 ## Project Structure
@@ -33,32 +45,47 @@ python -m pytest tests/ -v
 ```
 sage/
 ├── sage_core/              # Core backtesting engine
-│   ├── config/            # Configuration models
+│   ├── config/            # Configuration models (SystemConfig, Pydantic)
 │   ├── data/              # Data ingestion & loading
-│   ├── strategies/        # Trading strategies
-│   ├── meta/              # Meta-allocation layer
-│   ├── allocators/        # Portfolio allocators
-│   ├── portfolio/         # Portfolio construction
+│   ├── strategies/        # Trading strategies (intent output only)
+│   ├── meta/              # Meta-allocation layer (combination + gates)
+│   ├── allocators/        # Portfolio allocators (InvVol, EqualWeight, MeanVar*)
+│   ├── portfolio/         # Portfolio construction (risk caps, vol targeting)
 │   ├── walkforward/       # Walkforward engine
-│   ├── cache/             # Result caching
-│   └── utils/             # Shared utilities
+│   ├── metrics/           # Performance metrics (Sharpe, DD, CAGR, turnover)
+│   ├── cache/             # Result caching (config hash → artifacts)
+│   ├── utils/             # Shared utilities (paths, warmup, logging)
+│   ├── execution/         # ExecutionModule + ExecutionPolicy (planned)
+│   ├── features/          # Feature store + FeatureMatrixBuilder (planned)
+│   ├── costs/             # Transaction cost model (planned)
+│   ├── analysis/          # Regime classifier, error analysis (planned)
+│   ├── tracking/          # Experiment tracking - MLflow/W&B (planned)
+│   └── scripts/           # run_demo, validate_reproducibility (planned)
 │
-├── sage_viz/              # Streamlit visualization app
-│   ├── app.py            # Main entry point
+├── app/                   # Streamlit visualization app
+│   ├── streamlit_app.py  # Main entry point
 │   └── ui/               # UI components
 │
-├── tests/                 # Test suite
+├── tests/                 # Test suite (27 files)
 │   ├── conftest.py       # Shared fixtures
 │   ├── test_config.py    # Config tests
 │   ├── test_utils.py     # Utility tests
-│   └── test_fixtures.py  # Fixture tests
+│   ├── test_fixtures.py  # Fixture tests
+│   └── test_invariants.py # Invariant test suite (planned)
 │
 ├── configs/presets/       # Preset configurations
-├── data/                  # Market data
+├── data/                  # Market data (+ snapshots for reproducibility)
 ├── cache/                 # Cached results
 ├── docs/                  # Documentation
+│   ├── ARCHITECTURE.md   # System design & decisions
+│   ├── DEVELOPMENT.md    # This file
+│   └── ROADMAP.md        # 14-week execution plan
+│
+├── runs/                  # Run artifacts (planned)
 └── scripts/               # Utility scripts
 ```
+
+> Items marked *(planned)* are defined in `ROADMAP.md` and do not yet exist in the codebase.
 
 ---
 
@@ -77,6 +104,8 @@ Follow these guidelines:
 - Write docstrings for all public functions/classes
 - Keep functions focused and testable
 - Follow existing code style
+- **Strategies must return intent (signals/scores), never positions or returns**
+- **Features must be pure functions of historical data** (no internal state)
 
 ### 3. **Run Tests**
 
@@ -88,10 +117,13 @@ pytest
 pytest tests/test_config.py
 
 # Run with coverage
-pytest --cov=sage_core --cov=sage_viz
+pytest --cov=sage_core --cov=app
 
 # Run with verbose output
 pytest -v
+
+# Run invariant tests only (once implemented)
+pytest tests/test_invariants.py -v
 ```
 
 ### 4. **Format Code**
@@ -104,7 +136,7 @@ black .
 ruff check .
 
 # Type check with mypy
-mypy sage_core sage_viz
+mypy sage_core app
 ```
 
 ### 5. **Commit Changes**
@@ -142,10 +174,10 @@ def test_feature_name():
     """Test that feature works correctly."""
     # Arrange
     config = SystemConfig(...)
-    
+
     # Act
     result = some_function(config)
-    
+
     # Assert
     assert result.some_property == expected_value
 ```
@@ -163,6 +195,43 @@ def test_with_fixture(default_system_config):
 - **Config models**: 100% coverage
 - **Core logic**: >90% coverage
 - **UI components**: >70% coverage
+- **Invariants**: Must all pass (zero tolerance)
+
+### Invariant Tests (Planned — ROADMAP Week 4)
+
+These tests prove system correctness and must never be skipped:
+
+```python
+# tests/test_invariants.py
+
+def test_zero_signals_zero_returns():
+    """Zero signals must produce zero returns."""
+    ...
+
+def test_cost_free_gross_equals_net():
+    """When costs = 0, gross_returns must equal net_returns."""
+    ...
+
+def test_cost_monotonicity():
+    """Increasing costs should decrease avg daily net return.
+    Scoped to PassthroughStrategy + equal-weight allocator."""
+    ...
+
+def test_execution_delay_changes_performance():
+    """Delaying execution by +k days must produce different results.
+    If identical, same-bar execution is happening silently."""
+    ...
+
+def test_no_silent_alignment():
+    """Mismatched timestamps between signals and prices must error.
+    Catches silent .reindex() / join() behavior."""
+    ...
+
+def test_attribution_conservation():
+    """gross_returns ≈ signal + allocation + leverage components.
+    net_returns = gross - cost_total. Within tolerance."""
+    ...
+```
 
 ---
 
@@ -184,13 +253,13 @@ def calculate_sharpe(returns: pd.Series, annual_factor: float = 252.0) -> float:
 def align_returns(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
     """
     Align returns across multiple assets.
-    
+
     Args:
         data: Dictionary mapping symbols to DataFrames with returns
-    
+
     Returns:
         Wide DataFrame with index=date, columns=symbols, values=returns
-    
+
     Raises:
         ValueError: If data is empty or misaligned
     """
@@ -203,6 +272,19 @@ def align_returns(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 - **Classes**: `PascalCase`
 - **Constants**: `UPPER_SNAKE_CASE`
 - **Private**: `_leading_underscore`
+- **Feature columns**: `{strategy}.{indicator}_{param}` (e.g., `trend.momentum_20d`, `meanrev.rsi_14`)
+
+### Terminology
+
+Use these terms consistently throughout the codebase:
+
+| Term | Meaning | Example |
+|---|---|---|
+| **Intent** | Raw strategy output (signals or scores) | `{"SPY": +1, "TLT": -1}` |
+| **Target weights** | Desired weights after exposure mapping | `{"SPY": 0.6, "TLT": 0.4}` |
+| **Held weights** | Actual weights after execution + drift | `{"SPY": 0.58, "TLT": 0.42}` |
+| **Gross returns** | Pre-cost portfolio returns | — |
+| **Net returns** | Post-cost portfolio returns | — |
 
 ---
 
@@ -210,22 +292,32 @@ def align_returns(data: dict[str, pd.DataFrame]) -> pd.DataFrame:
 
 ### Adding a New Strategy
 
+Strategies output **intent** (signals or scores), never positions or returns.
+The engine handles timing and exposure mapping.
+
 1. **Create strategy file**: `sage_core/strategies/my_strategy_v1.py`
 
 ```python
-from typing import Protocol
 import pandas as pd
 
-class Strategy(Protocol):
+class Strategy:
+    """Strategy Protocol — all strategies must conform to this interface."""
     name: str
-    
+
     def run(
         self,
         asset_data: dict[str, pd.DataFrame],
         schedule: "ScheduleConfig",
         cfg: "StrategyConfig",
     ) -> dict[str, pd.DataFrame]:
-        """Run strategy and return signals."""
+        """
+        Generate intent (signals/scores) at time t.
+
+        Returns:
+            Dict mapping asset symbols to DataFrames with raw signals.
+            Signals are UNSHIFTED — the engine applies ExecutionPolicy
+            to produce lagged positions at t+1.
+        """
         ...
 ```
 
@@ -238,17 +330,20 @@ def run_my_strategy_v1(
 ) -> pd.DataFrame:
     """
     My custom strategy implementation.
-    
+
     Args:
         df: Test period data
         train_df: Training period data
         params: Strategy parameters
-    
+
     Returns:
-        DataFrame with signals and meta_raw_ret
+        DataFrame with raw signals (intent).
+        Do NOT shift signals — the engine handles timing.
+        Do NOT compute returns — the engine handles that.
     """
-    # Your logic here
-    ...
+    # Your signal logic here
+    signals = ...
+    return signals
 ```
 
 3. **Add to config**: Update `StrategyConfig` in `system_config.py`
@@ -257,10 +352,74 @@ strategies: List[Literal["trend_v1", "meanrev_v1", "my_strategy_v1"]]
 ```
 
 4. **Write tests**: `tests/test_strategies.py`
+   - Test signal output shape and values
+   - Test that strategy does NOT return shifted signals
+   - Test warmup period handling
 
 ### Adding a New Allocator
 
-Similar process to strategies. See `docs/ARCHITECTURE.md` for allocator interface.
+Allocators take validated signals and produce portfolio weights.
+All allocators must satisfy the **output contract** (see `ARCHITECTURE.md`).
+
+1. **Create allocator file**: `sage_core/allocators/my_allocator_v1.py`
+
+```python
+# Current pattern (bare functions):
+def compute_my_weights(
+    returns: pd.DataFrame,
+    lookback: int,
+    **kwargs,
+) -> pd.Series:
+    """
+    Compute portfolio weights.
+
+    Output contract (enforced by AssetAllocator ABC once implemented):
+    - Weights sum to 1.0 (or target gross exposure)
+    - Per-asset bounds respected
+    - No NaN values
+    - Must never raise — return fallback weights on failure
+    """
+    ...
+```
+
+2. **Planned ABC pattern** (ROADMAP Week 3):
+```python
+from sage_core.allocators.base import AssetAllocator
+
+class MyAllocator(AssetAllocator):
+    def validate_params(self) -> None: ...
+    def get_warmup_period(self) -> int: ...
+    def compute_weights(self, returns: pd.DataFrame) -> pd.Series:
+        """_validate_output() is called automatically after this."""
+        ...
+```
+
+3. **Add to config**: Update `AllocatorConfig` in `system_config.py`
+4. **Write tests**: Verify output contract compliance
+
+### Adding a New Feature Generator (Planned — ROADMAP Week 6)
+
+Features are pure functions of historical data — no internal state, no access
+to predictions or portfolio state.
+
+```python
+from sage_core.features.base import FeatureGenerator
+
+class MyFeature(FeatureGenerator):
+    required_columns = ["close"]
+    output_names = ["mystrategy.my_indicator_20d"]  # namespaced!
+    warmup_period = 20
+    scope = "time_series"  # or "cross_sectional"
+
+    def generate(self, data: pd.DataFrame) -> pd.DataFrame:
+        """
+        Pure function: same input → same output (always).
+        No internal state between calls.
+        """
+        ...
+```
+
+**Testing**: Call `generate()` twice with the same input — assert identical output.
 
 ---
 
@@ -426,6 +585,7 @@ pip install -e .
 ## Resources
 
 - **Architecture**: See `docs/ARCHITECTURE.md`
+- **Roadmap**: See `docs/ROADMAP.md`
 - **Pydantic Docs**: https://docs.pydantic.dev/
 - **Pandas Docs**: https://pandas.pydata.org/docs/
 - **Streamlit Docs**: https://docs.streamlit.io/
@@ -436,7 +596,6 @@ pip install -e .
 
 - **Issues**: Open a GitHub issue
 - **Questions**: Use GitHub Discussions
-- **Slack**: [Your Slack channel]
 
 ---
 
@@ -456,3 +615,6 @@ pip install -e .
 - [ ] No linting errors (ruff)
 - [ ] Type hints added
 - [ ] Docstrings complete
+- [ ] Strategies return intent only (no positions/returns)
+- [ ] Features are pure functions (no internal state)
+- [ ] Feature names are namespaced (`{strategy}.{indicator}_{param}`)

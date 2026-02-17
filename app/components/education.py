@@ -8,7 +8,7 @@ from app.components.layers import DEFAULT_LAYER_KEY, LABEL_TO_KEY, LAYER_LABELS,
 from app.meta_allocator_ui.registry import get_meta_allocator_spec
 from app.portfolio_allocator_ui.registry import get_portfolio_allocator_spec
 from app.strategy_ui.registry import get_strategy_spec
-from app.utils.formatters import format_percentage, format_ratio
+from app.utils.formatters import format_percentage, format_ratio, format_days, format_leverage
 
 COMBINATION_LABELS = {
     "majority": "Majority vote",
@@ -38,31 +38,6 @@ def _render_pipeline(selected_layer_key: str) -> None:
         + "</div>"
     )
     st.markdown(html, unsafe_allow_html=True)
-
-
-def _fmt_days(value) -> str:
-    if value is None:
-        return "N/A"
-    return f"{int(value)} days"
-
-
-def _fmt_pct(value, decimals: int = 2) -> str:
-    if value is None:
-        return "N/A"
-    return format_percentage(value, decimals)
-
-
-def _fmt_ratio(value, decimals: int = 2) -> str:
-    if value is None:
-        return "N/A"
-    return format_ratio(value, decimals)
-
-
-def _fmt_leverage(value) -> str:
-    if value is None:
-        return "N/A"
-    return f"{value:.1f}x"
-
 
 def _render_param_lines(lines: List[Tuple[str, str, str]]) -> None:
     for label, value, description in lines:
@@ -95,10 +70,10 @@ def _render_strategy_layer(config: Dict) -> None:
 
         if strategy_name == "trend":
             lines = [
-                ("Momentum lookback", _fmt_days(params.get("momentum_lookback")), "Days used for momentum calculation."),
-                ("Short SMA", _fmt_days(params.get("sma_short")), "Short moving average window."),
-                ("Long SMA", _fmt_days(params.get("sma_long")), "Long moving average window (must exceed short SMA)."),
-                ("Breakout period", _fmt_days(params.get("breakout_period")), "Lookback window for breakout signal."),
+                ("Momentum lookback", format_days(params.get("momentum_lookback")), "Days used for momentum calculation."),
+                ("Short SMA", format_days(params.get("sma_short")), "Short moving average window."),
+                ("Long SMA", format_days(params.get("sma_long")), "Long moving average window (must exceed short SMA)."),
+                ("Breakout period", format_days(params.get("breakout_period")), "Lookback window for breakout signal."),
                 ("Signal combination", combination_label, "How momentum, MA, and breakout signals are combined."),
             ]
             _render_param_lines(lines)
@@ -106,22 +81,22 @@ def _render_strategy_layer(config: Dict) -> None:
                 weights = list(params.get("weights") or [])
                 weights += [None] * (3 - len(weights))
                 weight_lines = [
-                    ("Momentum weight", _fmt_pct(weights[0]), "Weight for momentum signal."),
-                    ("MA weight", _fmt_pct(weights[1]), "Weight for moving average signal."),
-                    ("Breakout weight", _fmt_pct(weights[2]), "Weight for breakout signal."),
-                    ("Weighted threshold", _fmt_pct(params.get("weighted_threshold")), "Higher threshold is more conservative."),
+                    ("Momentum weight", format_percentage(weights[0]), "Weight for momentum signal."),
+                    ("MA weight", format_percentage(weights[1]), "Weight for moving average signal."),
+                    ("Breakout weight", format_percentage(weights[2]), "Weight for breakout signal."),
+                    ("Weighted threshold", format_percentage(params.get("weighted_threshold")), "Higher threshold is more conservative."),
                 ]
                 _render_param_lines(weight_lines)
 
         elif strategy_name == "meanrev":
             lines = [
-                ("RSI period", _fmt_days(params.get("rsi_period")), "Window length for RSI calculation."),
-                ("RSI oversold", _fmt_ratio(params.get("rsi_oversold")), "Buy threshold for RSI."),
-                ("RSI overbought", _fmt_ratio(params.get("rsi_overbought")), "Sell threshold for RSI."),
-                ("Bollinger period", _fmt_days(params.get("bb_period")), "Window length for Bollinger Bands."),
-                ("Bollinger std dev", _fmt_ratio(params.get("bb_std")), "Standard deviation multiplier."),
-                ("Z-Score lookback", _fmt_days(params.get("zscore_lookback")), "Window length for Z-Score."),
-                ("Z-Score threshold", _fmt_ratio(params.get("zscore_threshold")), "Higher threshold means fewer trades."),
+                ("RSI period", format_days(params.get("rsi_period")), "Window length for RSI calculation."),
+                ("RSI oversold", format_ratio(params.get("rsi_oversold")), "Buy threshold for RSI."),
+                ("RSI overbought", format_ratio(params.get("rsi_overbought")), "Sell threshold for RSI."),
+                ("Bollinger period", format_days(params.get("bb_period")), "Window length for Bollinger Bands."),
+                ("Bollinger std dev", format_ratio(params.get("bb_std")), "Standard deviation multiplier."),
+                ("Z-Score lookback", format_days(params.get("zscore_lookback")), "Window length for Z-Score."),
+                ("Z-Score threshold", format_ratio(params.get("zscore_threshold")), "Higher threshold means fewer trades."),
                 ("Signal combination", combination_label, "How RSI, BB, and Z-Score are combined."),
             ]
             _render_param_lines(lines)
@@ -129,10 +104,10 @@ def _render_strategy_layer(config: Dict) -> None:
                 weights = list(params.get("weights") or [])
                 weights += [None] * (3 - len(weights)) # Pads weights so the UI can safely index even if the config is missing some weights
                 weight_lines = [
-                    ("RSI weight", _fmt_pct(weights[0]), "Weight for RSI signal."),
-                    ("Bollinger weight", _fmt_pct(weights[1]), "Weight for Bollinger Bands signal."),
-                    ("Z-Score weight", _fmt_pct(weights[2]), "Weight for Z-Score signal."),
-                    ("Weighted threshold", _fmt_pct(params.get("weighted_threshold")), "Higher threshold is more conservative."),
+                    ("RSI weight", format_percentage(weights[0]), "Weight for RSI signal."),
+                    ("Bollinger weight", format_percentage(weights[1]), "Weight for Bollinger Bands signal."),
+                    ("Z-Score weight", format_percentage(weights[2]), "Weight for Z-Score signal."),
+                    ("Weighted threshold", format_percentage(params.get("weighted_threshold")), "Higher threshold is more conservative."),
                 ]
                 _render_param_lines(weight_lines)
 
@@ -161,11 +136,11 @@ def _render_meta_layer(config: Dict) -> None:
         lines = []
         for strategy_name, weight in weights.items():
             label = get_strategy_spec(strategy_name).display_name
-            lines.append((f"{label} weight", _fmt_pct(weight), "Fixed weight assigned to this strategy."))
+            lines.append((f"{label} weight", format_percentage(weight), "Fixed weight assigned to this strategy."))
         _render_param_lines(lines)
     elif meta_allocator["type"] == "risk_parity":
         lines = [
-            ("Volatility lookback", _fmt_days(params.get("vol_lookback")), "Window for strategy volatility estimation."),
+            ("Volatility lookback", format_days(params.get("vol_lookback")), "Window for strategy volatility estimation."),
         ]
         _render_param_lines(lines)
 
@@ -188,7 +163,7 @@ def _render_asset_layer(config: Dict) -> None:
     if asset_allocator["type"] == "inverse_vol_v1":
         lines.append((
             "Inverse vol window",
-            _fmt_days(params.get("lookback")),
+            format_days(params.get("lookback")),
             "Lookback window for inverse volatility weights.",
         ))
 
@@ -205,13 +180,13 @@ def _render_risk_caps_layer(config: Dict) -> None:
     }
     sector_label = "Disabled"
     if config.get("max_sector_weight") is not None:
-        sector_label = _fmt_pct(config.get("max_sector_weight"))
+        sector_label = format_percentage(config.get("max_sector_weight"))
 
     lines = [
         ("Cap mode", cap_mode_labels.get(config.get("cap_mode"), "N/A"), "When to enforce caps relative to leverage."),
         (
             "Max weight per asset",
-            _fmt_pct(config.get("max_weight_per_asset")),
+            format_percentage(config.get("max_weight_per_asset")),
             "Maximum allocation to any single asset.",
         ),
         (
@@ -232,10 +207,10 @@ def _render_vol_targeting_layer(config: Dict) -> None:
     st.markdown("**Purpose**: Scales exposure to hit a target annualized volatility.")
 
     lines = [
-        ("Target volatility", _fmt_pct(config.get("target_vol")), "Desired annualized volatility."),
-        ("Volatility lookback", _fmt_days(config.get("vol_lookback")), "Window for volatility estimation."),
-        ("Min leverage", _fmt_leverage(config.get("min_leverage")), "Lower bound on leverage."),
-        ("Max leverage", _fmt_leverage(config.get("max_leverage")), "Upper bound on leverage."),
+        ("Target volatility", format_percentage(config.get("target_vol")), "Desired annualized volatility."),
+        ("Volatility lookback", format_days(config.get("vol_lookback")), "Window for volatility estimation."),
+        ("Min leverage", format_leverage(config.get("min_leverage")), "Lower bound on leverage."),
+        ("Max leverage", format_leverage(config.get("max_leverage")), "Upper bound on leverage."),
     ]
     _render_param_lines(lines)
 
