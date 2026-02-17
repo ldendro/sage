@@ -5,8 +5,11 @@ from typing import Any, Dict, List
 import streamlit as st
 
 
-def render_params(key_prefix: str, selected_strategies: List[str]) -> Dict[str, Any]:
+def render_params(key_prefix: str, selected_strategies: List[str], current_values: Dict[str, Any] = None) -> Dict[str, Any]:
     """Render fixed-weight parameters and return params dict."""
+    cv = current_values or {}
+    saved_weights = cv.get("weights", {})
+
     st.markdown("**Strategy Weights**")
 
     weights: Dict[str, float] = {}
@@ -19,7 +22,11 @@ def render_params(key_prefix: str, selected_strategies: List[str]) -> Dict[str, 
             weights[strategy_name] = round(remaining / 100.0, 4)
             st.markdown(f"**{label} Weight:** {remaining:.0f}%")
         else:
-            default_weight = (100.0 / n_strategies) if n_strategies else 0.0
+            if strategy_name in saved_weights:
+                default_weight = round(saved_weights[strategy_name] * 100.0, 2)
+            else:
+                default_weight = (100.0 / n_strategies) if n_strategies else 0.0
+            default_weight = min(default_weight, remaining)
             weight_key = f"{key_prefix}weight_{strategy_name}"
             if weight_key in st.session_state:
                 if st.session_state[weight_key] > remaining:
@@ -30,7 +37,7 @@ def render_params(key_prefix: str, selected_strategies: List[str]) -> Dict[str, 
                 f"**{label} Weight**",
                 min_value=0.0,
                 max_value=remaining,
-                value=min(default_weight, remaining),
+                value=default_weight,
                 step=1.0,
                 format="%.0f%%",
                 key=weight_key,

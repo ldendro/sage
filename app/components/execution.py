@@ -3,8 +3,6 @@
 import streamlit as st
 from typing import List
 
-# ==================== DEFAULTS ====================
-# (None for execution control)
 
 
 def render(errors: List[str]) -> bool:
@@ -70,9 +68,6 @@ def render_advanced_settings():
                 deleted = clear_cache()
                 if deleted > 0:
                     st.success(f"Deleted {deleted} cache file(s)")
-                    # Rerun to update stats immediately? 
-                    # st.rerun() is tricky inside a component, might loop. 
-                    # But usually safe if triggered by button.
                 else:
                     st.info("Cache was already empty")
         

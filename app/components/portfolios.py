@@ -1,13 +1,14 @@
 """Portfolio configuration manager component."""
 
-from typing import Dict, List, Tuple
+from typing import Dict, List
+import copy
 import streamlit as st
 
 from app.components import strategies, meta, allocator, risk
 from app.components.layers import (
     DEFAULT_LAYER_KEY,
     LABEL_TO_KEY,
-    LAYER_DEFINITIONS,
+    PIPELINE_STEPS,
     LAYER_LABELS,
 )
 from app.meta_allocator_ui import risk_parity as meta_risk_parity_ui
@@ -20,7 +21,6 @@ from app.utils.validators import (
 )
 
 MAX_PORTFOLIOS = 5
-_UNSET = object()
 
 PORTFOLIO_COLORS = [
     "#4C78A8",  # Blue
@@ -29,6 +29,289 @@ PORTFOLIO_COLORS = [
     "#72B7B2",  # Teal
     "#54A24B",  # Green
 ]
+
+
+def _default_trend_params() -> Dict[str, object]:
+    defaults = trend_ui.DEFAULTS
+    return {
+        "momentum_lookback": defaults["momentum_lookback"],
+        "sma_short": defaults["sma_short"],
+        "sma_long": defaults["sma_long"],
+        "breakout_period": defaults["breakout_period"],
+        "combination_method": defaults["combination_method"],
+        "weights": list(defaults["weights"]),
+        "weighted_threshold": defaults["weighted_threshold"],
+    }
+
+
+def _default_meanrev_params() -> Dict[str, object]:
+    defaults = meanrev_ui.DEFAULTS
+    return {
+        "rsi_period": defaults["rsi_period"],
+        "rsi_oversold": defaults["rsi_oversold"],
+        "rsi_overbought": defaults["rsi_overbought"],
+        "bb_period": defaults["bb_period"],
+        "bb_std": defaults["bb_std"],
+        "zscore_lookback": defaults["zscore_lookback"],
+        "zscore_threshold": defaults["zscore_threshold"],
+        "combination_method": defaults["combination_method"],
+        "weights": list(defaults["weights"]),
+        "weighted_threshold": defaults["weighted_threshold"],
+    }
+
+
+def _default_strategy_params(strategy_name: str) -> Dict[str, object]:
+    if strategy_name == "trend":
+        return _default_trend_params()
+    if strategy_name == "meanrev":
+        return _default_meanrev_params()
+    return {}
+
+
+def _default_asset_allocator() -> Dict[str, object]:
+    alloc_type = allocator.DEFAULT_ALLOCATOR_TYPE
+    params: Dict[str, object] = {}
+    if alloc_type == "inverse_vol_v1":
+        params["lookback"] = inverse_vol_ui.DEFAULT_LOOKBACK
+    return {"type": alloc_type, "params": params}
+
+
+def _default_meta_allocator() -> Dict[str, object]:
+    return {"type": meta.DEFAULT_META_ALLOCATOR_TYPE, "params": {}}
+
+
+def _default_portfolio_config() -> Dict[str, object]:
+    selected_strategies = list(strategies.DEFAULT_STRATEGIES)
+    strategies_config = {
+        name: {"params": _default_strategy_params(name)} for name in selected_strategies
+    }
+    return {
+        "selected_strategies": selected_strategies,
+        "strategies": strategies_config,
+        "meta_allocator": _default_meta_allocator(),
+        "asset_allocator": _default_asset_allocator(),
+        "cap_mode": "both",
+        "max_weight_per_asset": risk.DEFAULT_MAX_WEIGHT_PER_ASSET,
+        "use_sector_cap": False,
+        "max_sector_weight": risk.DEFAULT_MAX_SECTOR_WEIGHT,
+        "min_assets_held": risk.DEFAULT_MIN_ASSETS_HELD,
+        "target_vol": risk.DEFAULT_TARGET_VOL,
+        "vol_lookback": risk.DEFAULT_VOL_LOOKBACK,
+        "min_leverage": risk.DEFAULT_MIN_LEVERAGE,
+        "max_leverage": risk.DEFAULT_MAX_LEVERAGE,
+    }
+
+
+def _ensure_strategy_entries(config: Dict, selected_strategies: List[str]) -> None:
+    strategies_config = config.setdefault("strategies", {})
+    for strategy_name in selected_strategies:
+        entry = strategies_config.get(strategy_name)
+        if not isinstance(entry, dict) or "params" not in entry:
+            strategies_config[strategy_name] = {"params": _default_strategy_params(strategy_name)}
+
+
+def _normalize_portfolio_config(config: Dict) -> None:
+    defaults = _default_portfolio_config()
+    for key, value in defaults.items():
+        if key not in config:
+            config[key] = copy.deepcopy(value)
+
+    if not config.get("selected_strategies"):
+        config["selected_strategies"] = list(strategies.DEFAULT_STRATEGIES)
+
+    _ensure_strategy_entries(config, config["selected_strategies"])
+
+    asset_allocator = config.get("asset_allocator") or _default_asset_allocator()
+    asset_allocator.setdefault("params", {})
+    if asset_allocator.get("type") == "inverse_vol_v1":
+        asset_allocator["params"].setdefault("lookback", inverse_vol_ui.DEFAULT_LOOKBACK)
+    config["asset_allocator"] = asset_allocator
+
+    meta_allocator = config.get("meta_allocator") or _default_meta_allocator()
+    meta_allocator.setdefault("params", {})
+    if meta_allocator.get("type") == "risk_parity":
+        meta_allocator["params"].setdefault(
+            "vol_lookback",
+            meta_risk_parity_ui.DEFAULTS["vol_lookback"],
+        )
+    config["meta_allocator"] = meta_allocator
+
+    if "use_sector_cap" not in config:
+        config["use_sector_cap"] = False
+    if "max_sector_weight" not in config:
+        config["max_sector_weight"] = risk.DEFAULT_MAX_SECTOR_WEIGHT
+
+
+def _ensure_portfolio_config(portfolio_id: str) -> Dict[str, object]:
+    configs = st.session_state.portfolio_live_configs
+    config = configs.get(portfolio_id)
+    if config is None:
+        config = _default_portfolio_config()
+        configs[portfolio_id] = config
+    else:
+        _normalize_portfolio_config(config)
+    return config
+
+
+def _strategy_config_from_config(config: Dict, selected_strategies: List[str]) -> Dict[str, Dict]:
+    _ensure_strategy_entries(config, selected_strategies)
+    strategies_config: Dict[str, Dict] = {}
+    for strategy_name in selected_strategies:
+        strategies_config[strategy_name] = config["strategies"].get(
+            strategy_name,
+            {"params": _default_strategy_params(strategy_name)},
+        )
+    return strategies_config
+
+
+def _validate_strategies(selected_strategies: List[str]) -> List[str]:
+    errors: List[str] = []
+    if not selected_strategies:
+        errors.append("At least one strategy must be selected")
+    if len(selected_strategies) > 1 and "passthrough" in selected_strategies:
+        errors.append("Passthrough strategy cannot be combined with other strategies")
+    return errors
+
+
+def _sync_fixed_weight_for_selection(config: Dict, selected_strategies: List[str]) -> None:
+    meta_allocator = config.get("meta_allocator")
+    if not meta_allocator or meta_allocator.get("type") != "fixed_weight":
+        return
+    params = meta_allocator.setdefault("params", {})
+    weights = dict(params.get("weights", {}))
+    weights = {name: weight for name, weight in weights.items() if name in selected_strategies}
+    missing = [name for name in selected_strategies if name not in weights]
+    if missing:
+        remaining = max(0.0, 1.0 - sum(weights.values()))
+        add = remaining / len(missing) if missing else 0.0
+        for name in missing:
+            weights[name] = round(add, 4)
+    params["weights"] = weights
+
+
+def _meta_allocator_for_run(config: Dict, selected_strategies: List[str]) -> Dict:
+    if len(selected_strategies) <= 1:
+        return None
+
+    meta_allocator = config.get("meta_allocator") or _default_meta_allocator()
+    allocator_type = meta_allocator.get("type") or meta.DEFAULT_META_ALLOCATOR_TYPE
+    params = dict(meta_allocator.get("params") or {})
+
+    if allocator_type == "fixed_weight":
+        weights = params.get("weights", {})
+        if not weights or any(name not in weights for name in selected_strategies):
+            _sync_fixed_weight_for_selection(config, selected_strategies)
+            params = dict(config.get("meta_allocator", {}).get("params", {}))
+            weights = params.get("weights", {})
+        params = {"weights": weights}
+    elif allocator_type == "risk_parity":
+        params = {
+            "vol_lookback": params.get(
+                "vol_lookback",
+                meta_risk_parity_ui.DEFAULTS["vol_lookback"],
+            ),
+        }
+
+    return {"type": allocator_type, "params": params}
+
+
+def _validate_meta_allocator(meta_allocator: Dict, selected_strategies: List[str]) -> List[str]:
+    if len(selected_strategies) <= 1 or not meta_allocator:
+        return []
+    errors: List[str] = []
+    if meta_allocator.get("type") == "fixed_weight":
+        weights = meta_allocator.get("params", {}).get("weights", {})
+        total = sum(weights.values())
+        if abs(total - 1.0) > 0.01:
+            errors.append(f"Strategy weights must sum to 100% (currently {total:.0%})")
+    return errors
+
+
+def _asset_allocator_for_run(config: Dict) -> Dict:
+    asset_allocator = config.get("asset_allocator") or _default_asset_allocator()
+    allocator_type = asset_allocator.get("type") or allocator.DEFAULT_ALLOCATOR_TYPE
+    params = dict(asset_allocator.get("params") or {})
+    if allocator_type == "inverse_vol_v1":
+        params.setdefault("lookback", inverse_vol_ui.DEFAULT_LOOKBACK)
+    return {"type": allocator_type, "params": params}
+
+
+def _vol_window_from_asset_allocator(asset_allocator: Dict) -> int:
+    params = asset_allocator.get("params", {})
+    return params.get("lookback") or params.get("vol_window")
+
+
+def _risk_config_for_run(config: Dict) -> Dict[str, object]:
+    use_sector_cap = config.get("use_sector_cap", False)
+    max_sector_weight_raw = config.get("max_sector_weight", risk.DEFAULT_MAX_SECTOR_WEIGHT)
+    max_sector_weight = max_sector_weight_raw if use_sector_cap else None
+    return {
+        "max_weight_per_asset": config.get("max_weight_per_asset", risk.DEFAULT_MAX_WEIGHT_PER_ASSET),
+        "max_sector_weight": max_sector_weight,
+        "use_sector_cap": use_sector_cap,
+        "min_assets_held": config.get("min_assets_held", risk.DEFAULT_MIN_ASSETS_HELD),
+        "cap_mode": config.get("cap_mode", "both"),
+        "target_vol": config.get("target_vol", risk.DEFAULT_TARGET_VOL),
+        "vol_lookback": config.get("vol_lookback", risk.DEFAULT_VOL_LOOKBACK),
+        "min_leverage": config.get("min_leverage", risk.DEFAULT_MIN_LEVERAGE),
+        "max_leverage": config.get("max_leverage", risk.DEFAULT_MAX_LEVERAGE),
+    }
+
+
+def _validate_risk_config(config: Dict, universe: List[str]) -> List[str]:
+    use_sector_cap = config.get("use_sector_cap", False)
+    max_sector_weight_raw = config.get("max_sector_weight", risk.DEFAULT_MAX_SECTOR_WEIGHT)
+    max_sector_weight = max_sector_weight_raw if use_sector_cap else None
+    errors = validate_risk_caps_widget(
+        min_assets_held=config.get("min_assets_held", risk.DEFAULT_MIN_ASSETS_HELD),
+        universe=universe,
+        max_weight_per_asset=config.get(
+            "max_weight_per_asset",
+            risk.DEFAULT_MAX_WEIGHT_PER_ASSET,
+        ),
+        max_sector_weight=max_sector_weight,
+    )
+    errors.extend(
+        validate_volatility_targeting_widget(
+            config.get("min_leverage", risk.DEFAULT_MIN_LEVERAGE),
+            config.get("max_leverage", risk.DEFAULT_MAX_LEVERAGE),
+        )
+    )
+    return errors
+
+def _build_risk_cv(config: Dict) -> Dict:
+    """Build the current_values dict for the risk renderer from a portfolio config."""
+    return {
+        "cap_mode": config.get("cap_mode", "both"),
+        "max_weight_per_asset": config.get("max_weight_per_asset", risk.DEFAULT_MAX_WEIGHT_PER_ASSET),
+        "use_sector_cap": config.get("use_sector_cap", False),
+        "max_sector_weight": config.get("max_sector_weight", risk.DEFAULT_MAX_SECTOR_WEIGHT),
+        "min_assets_held": config.get("min_assets_held", risk.DEFAULT_MIN_ASSETS_HELD),
+        "target_vol": config.get("target_vol", risk.DEFAULT_TARGET_VOL),
+        "vol_lookback": config.get("vol_lookback", risk.DEFAULT_VOL_LOOKBACK),
+        "min_leverage": config.get("min_leverage", risk.DEFAULT_MIN_LEVERAGE),
+        "max_leverage": config.get("max_leverage", risk.DEFAULT_MAX_LEVERAGE),
+    }
+
+
+def _write_risk_back(config: Dict, risk_config: Dict) -> None:
+    """Write risk renderer output back to the portfolio config."""
+    config["cap_mode"] = risk_config["cap_mode"]
+    config["max_weight_per_asset"] = risk_config["max_weight_per_asset"]
+    config["use_sector_cap"] = risk_config.get(
+        "use_sector_cap",
+        config.get("use_sector_cap", False),
+    )
+    config["max_sector_weight"] = risk_config.get(
+        "max_sector_weight_raw",
+        config.get("max_sector_weight", risk.DEFAULT_MAX_SECTOR_WEIGHT),
+    )
+    config["min_assets_held"] = risk_config["min_assets_held"]
+    config["target_vol"] = risk_config["target_vol"]
+    config["vol_lookback"] = risk_config["vol_lookback"]
+    config["min_leverage"] = risk_config["min_leverage"]
+    config["max_leverage"] = risk_config["max_leverage"]
+
 
 def _next_color(used_colors: List[str]) -> str:
     """Return the next available portfolio color."""
@@ -55,6 +338,7 @@ def _add_portfolio() -> None:
     })
     st.session_state.active_portfolio_id = portfolio_id
     st.session_state[f"{portfolio_id}_layer"] = LAYER_LABELS[DEFAULT_LAYER_KEY]
+    _ensure_portfolio_config(portfolio_id)
 
 
 def _init_state() -> None:
@@ -63,8 +347,9 @@ def _init_state() -> None:
         st.session_state.portfolios = []
     if "portfolio_counter" not in st.session_state:
         st.session_state.portfolio_counter = 0
-    if "portfolio_drafts" not in st.session_state:
-        st.session_state.portfolio_drafts = {}
+    if "portfolio_live_configs" not in st.session_state:
+        st.session_state.portfolio_live_configs = {}
+
     if "active_portfolio_id" not in st.session_state and st.session_state.portfolios:
         st.session_state.active_portfolio_id = st.session_state.portfolios[0]["id"]
     if st.session_state.portfolios:
@@ -79,24 +364,6 @@ def _init_state() -> None:
             st.session_state[layer_key] = LAYER_LABELS[DEFAULT_LAYER_KEY]
 
 
-def _state_value(key: str, default, fallback=_UNSET):
-    """Resolve a value from session state with optional fallback/default."""
-    if key in st.session_state:
-        return st.session_state[key]
-    if fallback is not _UNSET:
-        return fallback
-    return default
-
-
-def _seed_value(key: str, value) -> None:
-    """Seed a session state value once if it is not already set."""
-    if key in st.session_state:
-        return
-    if value is None:
-        return
-    st.session_state[key] = value
-
-
 def _set_active_portfolio(portfolio_id: str) -> None:
     """Update the active portfolio id in session state."""
     st.session_state.active_portfolio_id = portfolio_id
@@ -105,7 +372,7 @@ def _set_active_portfolio(portfolio_id: str) -> None:
 def _select_layer(container: st.delta_generator.DeltaGenerator, portfolio_id: str) -> str:
     """Render the layer selector and return the chosen label."""
     layer_key = f"{portfolio_id}_layer"
-    labels = [label for _, label in LAYER_DEFINITIONS]
+    labels = [label for _, label in PIPELINE_STEPS]
     current_label = st.session_state.get(layer_key, LAYER_LABELS[DEFAULT_LAYER_KEY])
     if current_label not in labels:
         current_label = LAYER_LABELS[DEFAULT_LAYER_KEY]
@@ -120,510 +387,6 @@ def _select_layer(container: st.delta_generator.DeltaGenerator, portfolio_id: st
             on_change=_set_active_portfolio,
             args=(portfolio_id,),
         )
-
-def _get_selected_strategies(key_prefix: str, draft_config: Dict) -> List[str]:
-    """Return selected strategies from state or draft config."""
-    return _state_value(
-        f"{key_prefix}strategies",
-        strategies.DEFAULT_STRATEGIES,
-        draft_config.get("selected_strategies", _UNSET),
-    )
-
-
-def _seed_strategy_state(
-    key_prefix: str,
-    draft_config: Dict,
-    selected_strategies: List[str],
-) -> None:
-    """Seed strategy widget state from draft config."""
-    _seed_value(f"{key_prefix}strategies", selected_strategies)
-
-    strategy_configs = draft_config.get("strategies", {})
-    for strategy_name in selected_strategies:
-        params = strategy_configs.get(strategy_name, {}).get("params", {})
-        prefix = f"{key_prefix}{strategy_name}_"
-
-        if strategy_name == "trend":
-            _seed_value(f"{prefix}momentum_lookback", params.get("momentum_lookback"))
-            _seed_value(f"{prefix}sma_short", params.get("sma_short"))
-            _seed_value(f"{prefix}sma_long", params.get("sma_long"))
-            _seed_value(f"{prefix}breakout_period", params.get("breakout_period"))
-            _seed_value(f"{prefix}combination_method", params.get("combination_method"))
-            weights = list(params.get("weights") or [])
-            if weights:
-                _seed_value(f"{prefix}weight_momentum", weights[0])
-                if len(weights) > 1:
-                    _seed_value(f"{prefix}weight_ma", weights[1])
-            _seed_value(f"{prefix}weighted_threshold", params.get("weighted_threshold"))
-        elif strategy_name == "meanrev":
-            _seed_value(f"{prefix}rsi_period", params.get("rsi_period"))
-            _seed_value(f"{prefix}rsi_oversold", params.get("rsi_oversold"))
-            _seed_value(f"{prefix}rsi_overbought", params.get("rsi_overbought"))
-            _seed_value(f"{prefix}bb_period", params.get("bb_period"))
-            _seed_value(f"{prefix}bb_std", params.get("bb_std"))
-            _seed_value(f"{prefix}zscore_lookback", params.get("zscore_lookback"))
-            _seed_value(f"{prefix}zscore_threshold", params.get("zscore_threshold"))
-            _seed_value(f"{prefix}combination_method", params.get("combination_method"))
-            weights = list(params.get("weights") or [])
-            if weights:
-                _seed_value(f"{prefix}weight_rsi", weights[0])
-                if len(weights) > 1:
-                    _seed_value(f"{prefix}weight_bb", weights[1])
-            _seed_value(f"{prefix}weighted_threshold", params.get("weighted_threshold"))
-
-
-def _seed_meta_state(
-    key_prefix: str,
-    draft_config: Dict,
-    selected_strategies: List[str],
-) -> None:
-    """Seed meta allocator widget state from draft config."""
-    meta_allocator = draft_config.get("meta_allocator")
-    if not meta_allocator:
-        return
-    _seed_value(f"{key_prefix}meta_allocator_type", meta_allocator.get("type"))
-
-    params = meta_allocator.get("params", {})
-    if meta_allocator.get("type") == "fixed_weight":
-        weights = params.get("weights", {})
-        remaining = 100.0
-        n_strategies = len(selected_strategies)
-        for i, strategy_name in enumerate(selected_strategies):
-            if i == n_strategies - 1:
-                break
-            fallback_weight = weights.get(strategy_name)
-            if fallback_weight is None:
-                fallback_pct = min(100.0 / n_strategies, remaining) if n_strategies else 0.0
-            else:
-                fallback_pct = round(fallback_weight * 100.0, 2)
-                if fallback_pct > remaining:
-                    fallback_pct = remaining
-            _seed_value(
-                f"{key_prefix}meta_fixed_weight_weight_{strategy_name}",
-                fallback_pct,
-            )
-            remaining = round(remaining - fallback_pct, 2)
-    elif meta_allocator.get("type") == "risk_parity":
-        _seed_value(
-            f"{key_prefix}meta_risk_parity_vol_lookback",
-            params.get("vol_lookback"),
-        )
-
-
-def _seed_asset_allocator_state(key_prefix: str, draft_config: Dict) -> None:
-    """Seed asset allocator widget state from draft config."""
-    asset_allocator = draft_config.get("asset_allocator")
-    if not asset_allocator:
-        return
-    _seed_value(f"{key_prefix}asset_allocator_type", asset_allocator.get("type"))
-    params = asset_allocator.get("params", {})
-    if asset_allocator.get("type") == "inverse_vol_v1":
-        _seed_value(
-            f"{key_prefix}allocator_inverse_vol_v1_lookback",
-            params.get("lookback"),
-        )
-
-
-def _seed_risk_state(key_prefix: str, draft_config: Dict) -> None:
-    """Seed risk and volatility targeting widget state from draft config."""
-    _seed_value(f"{key_prefix}cap_mode", draft_config.get("cap_mode"))
-    _seed_value(f"{key_prefix}max_weight_per_asset", draft_config.get("max_weight_per_asset"))
-    _seed_value(
-        f"{key_prefix}use_sector_cap",
-        draft_config.get("max_sector_weight") is not None,
-    )
-    _seed_value(f"{key_prefix}max_sector_weight", draft_config.get("max_sector_weight"))
-    _seed_value(f"{key_prefix}min_assets_held", draft_config.get("min_assets_held"))
-    _seed_value(f"{key_prefix}target_vol", draft_config.get("target_vol"))
-    _seed_value(f"{key_prefix}vol_lookback", draft_config.get("vol_lookback"))
-    _seed_value(f"{key_prefix}min_leverage", draft_config.get("min_leverage"))
-    _seed_value(f"{key_prefix}max_leverage", draft_config.get("max_leverage"))
-
-
-def _merge_draft_config(
-    draft_config: Dict,
-    new_config: Dict,
-    selected_strategies: List[str],
-) -> Dict:
-    """Merge current config into the stored draft to preserve values."""
-    merged = dict(draft_config)
-    merged.update({
-        "selected_strategies": list(selected_strategies),
-        "asset_allocator": new_config.get("asset_allocator"),
-        "vol_window": new_config.get("vol_window"),
-        "max_weight_per_asset": new_config.get("max_weight_per_asset"),
-        "max_sector_weight": new_config.get("max_sector_weight"),
-        "min_assets_held": new_config.get("min_assets_held"),
-        "cap_mode": new_config.get("cap_mode"),
-        "target_vol": new_config.get("target_vol"),
-        "vol_lookback": new_config.get("vol_lookback"),
-        "min_leverage": new_config.get("min_leverage"),
-        "max_leverage": new_config.get("max_leverage"),
-    })
-
-    draft_strategies = dict(draft_config.get("strategies", {}))
-    new_strategies = new_config.get("strategies", {})
-    draft_strategies.update(new_strategies)
-    merged["strategies"] = draft_strategies
-
-    if len(selected_strategies) > 1:
-        merged["meta_allocator"] = new_config.get("meta_allocator")
-    else:
-        merged["meta_allocator"] = draft_config.get("meta_allocator")
-
-    return merged
-
-
-def _build_trend_params(prefix: str, draft_params: Dict) -> Dict:
-    """Assemble trend parameters from state/draft with safeguards."""
-    defaults = trend_ui.DEFAULTS
-    momentum_lookback = _state_value(
-        f"{prefix}momentum_lookback",
-        defaults["momentum_lookback"],
-        draft_params.get("momentum_lookback", _UNSET),
-    )
-    sma_short = _state_value(
-        f"{prefix}sma_short",
-        defaults["sma_short"],
-        draft_params.get("sma_short", _UNSET),
-    )
-    sma_long_default = defaults["sma_long"]
-    if sma_long_default < sma_short + 1:
-        sma_long_default = sma_short + 1
-    sma_long = _state_value(
-        f"{prefix}sma_long",
-        sma_long_default,
-        draft_params.get("sma_long", _UNSET),
-    )
-    if sma_long < sma_short + 1:
-        sma_long = sma_short + 1
-    breakout_period = _state_value(
-        f"{prefix}breakout_period",
-        defaults["breakout_period"],
-        draft_params.get("breakout_period", _UNSET),
-    )
-    combination_method = _state_value(
-        f"{prefix}combination_method",
-        defaults["combination_method"],
-        draft_params.get("combination_method", _UNSET),
-    )
-
-    weights = list(defaults["weights"])
-    weighted_threshold = _state_value(
-        f"{prefix}weighted_threshold",
-        defaults["weighted_threshold"],
-        draft_params.get("weighted_threshold", _UNSET),
-    )
-    draft_weights = list(draft_params.get("weights") or weights)
-    if combination_method == "weighted":
-        weight_momentum = _state_value(
-            f"{prefix}weight_momentum",
-            weights[0],
-            draft_weights[0] if len(draft_weights) > 0 else _UNSET,
-        )
-        weight_ma = _state_value(
-            f"{prefix}weight_ma",
-            weights[1],
-            draft_weights[1] if len(draft_weights) > 1 else _UNSET,
-        )
-        weight_breakout = max(0.0, 1.0 - weight_momentum - weight_ma)
-        weights = [weight_momentum, weight_ma, weight_breakout]
-        weighted_threshold = _state_value(
-            f"{prefix}weighted_threshold",
-            defaults["weighted_threshold"],
-            draft_params.get("weighted_threshold", _UNSET),
-        )
-
-    return {
-        "momentum_lookback": momentum_lookback,
-        "sma_short": sma_short,
-        "sma_long": sma_long,
-        "breakout_period": breakout_period,
-        "combination_method": combination_method,
-        "weights": weights,
-        "weighted_threshold": weighted_threshold,
-    }
-
-
-def _build_meanrev_params(prefix: str, draft_params: Dict) -> Dict:
-    """Assemble mean-reversion parameters from state/draft with safeguards."""
-    defaults = meanrev_ui.DEFAULTS
-    rsi_period = _state_value(
-        f"{prefix}rsi_period",
-        defaults["rsi_period"],
-        draft_params.get("rsi_period", _UNSET),
-    )
-    rsi_oversold = _state_value(
-        f"{prefix}rsi_oversold",
-        defaults["rsi_oversold"],
-        draft_params.get("rsi_oversold", _UNSET),
-    )
-    rsi_overbought_default = defaults["rsi_overbought"]
-    if rsi_overbought_default < rsi_oversold + 1:
-        rsi_overbought_default = rsi_oversold + 1
-    rsi_overbought = _state_value(
-        f"{prefix}rsi_overbought",
-        rsi_overbought_default,
-        draft_params.get("rsi_overbought", _UNSET),
-    )
-    if rsi_overbought < rsi_oversold + 1:
-        rsi_overbought = rsi_oversold + 1
-    bb_period = _state_value(
-        f"{prefix}bb_period",
-        defaults["bb_period"],
-        draft_params.get("bb_period", _UNSET),
-    )
-    bb_std = _state_value(
-        f"{prefix}bb_std",
-        defaults["bb_std"],
-        draft_params.get("bb_std", _UNSET),
-    )
-    zscore_lookback = _state_value(
-        f"{prefix}zscore_lookback",
-        defaults["zscore_lookback"],
-        draft_params.get("zscore_lookback", _UNSET),
-    )
-    zscore_threshold = _state_value(
-        f"{prefix}zscore_threshold",
-        defaults["zscore_threshold"],
-        draft_params.get("zscore_threshold", _UNSET),
-    )
-    combination_method = _state_value(
-        f"{prefix}combination_method",
-        defaults["combination_method"],
-        draft_params.get("combination_method", _UNSET),
-    )
-
-    weights = list(defaults["weights"])
-    weighted_threshold = _state_value(
-        f"{prefix}weighted_threshold",
-        defaults["weighted_threshold"],
-        draft_params.get("weighted_threshold", _UNSET),
-    )
-    draft_weights = list(draft_params.get("weights") or weights)
-    if combination_method == "weighted":
-        weight_rsi = _state_value(
-            f"{prefix}weight_rsi",
-            weights[0],
-            draft_weights[0] if len(draft_weights) > 0 else _UNSET,
-        )
-        weight_bb = _state_value(
-            f"{prefix}weight_bb",
-            weights[1],
-            draft_weights[1] if len(draft_weights) > 1 else _UNSET,
-        )
-        weight_zscore = max(0.0, 1.0 - weight_rsi - weight_bb)
-        weights = [weight_rsi, weight_bb, weight_zscore]
-        weighted_threshold = _state_value(
-            f"{prefix}weighted_threshold",
-            defaults["weighted_threshold"],
-            draft_params.get("weighted_threshold", _UNSET),
-        )
-
-    return {
-        "rsi_period": rsi_period,
-        "rsi_oversold": rsi_oversold,
-        "rsi_overbought": rsi_overbought,
-        "bb_period": bb_period,
-        "bb_std": bb_std,
-        "zscore_lookback": zscore_lookback,
-        "zscore_threshold": zscore_threshold,
-        "combination_method": combination_method,
-        "weights": weights,
-        "weighted_threshold": weighted_threshold,
-    }
-
-
-def _build_strategy_params(strategy_name: str, key_prefix: str, draft_params: Dict) -> Dict:
-    """Build strategy parameters for a given strategy name."""
-    prefix = f"{key_prefix}{strategy_name}_"
-    if strategy_name == "trend":
-        return _build_trend_params(prefix, draft_params)
-    if strategy_name == "meanrev":
-        return _build_meanrev_params(prefix, draft_params)
-    return {}
-
-
-def _build_strategies_from_state(
-    key_prefix: str,
-    draft_config: Dict,
-) -> Tuple[List[str], Dict[str, Dict], List[str]]:
-    """Build strategy configs and validation errors from session state."""
-    selected_strategies = _get_selected_strategies(key_prefix, draft_config)
-    errors: List[str] = []
-    if not selected_strategies:
-        errors.append("At least one strategy must be selected")
-    if len(selected_strategies) > 1 and "passthrough" in selected_strategies:
-        errors.append("Passthrough strategy cannot be combined with other strategies")
-
-    strategies_config: Dict[str, Dict] = {}
-    draft_strategies = draft_config.get("strategies", {})
-    for strategy_name in selected_strategies:
-        draft_params = draft_strategies.get(strategy_name, {}).get("params", {})
-        params = _build_strategy_params(strategy_name, key_prefix, draft_params)
-        strategies_config[strategy_name] = {"params": params}
-
-    return selected_strategies, strategies_config, errors
-
-
-def _build_meta_allocator_from_state(
-    key_prefix: str,
-    selected_strategies: List[str],
-    draft_config: Dict,
-) -> Tuple[Dict, List[str]]:
-    """Build meta allocator config from state/draft."""
-    if len(selected_strategies) <= 1:
-        return None, []
-
-    draft_meta = draft_config.get("meta_allocator")
-    allocator_type = _state_value(
-        f"{key_prefix}meta_allocator_type",
-        meta.DEFAULT_META_ALLOCATOR_TYPE,
-        draft_meta.get("type", _UNSET) if draft_meta else _UNSET,
-    )
-    errors: List[str] = []
-    params: Dict = {}
-
-    if allocator_type == "fixed_weight":
-        weights: Dict[str, float] = {}
-        remaining = 100.0
-        n_strategies = len(selected_strategies)
-        draft_weights = {}
-        if draft_meta:
-            draft_weights = draft_meta.get("params", {}).get("weights", {})
-        for i, strategy_name in enumerate(selected_strategies):
-            if i == n_strategies - 1:
-                weight_pct = remaining
-            else:
-                default_weight = (100.0 / n_strategies) if n_strategies else 0.0
-                fallback_weight = draft_weights.get(strategy_name, _UNSET)
-                fallback_pct = _UNSET
-                if fallback_weight is not _UNSET:
-                    fallback_pct = round(fallback_weight * 100.0, 2)
-                    if fallback_pct > remaining:
-                        fallback_pct = remaining
-                weight_pct = _state_value(
-                    f"{key_prefix}meta_fixed_weight_weight_{strategy_name}",
-                    min(default_weight, remaining),
-                    fallback_pct,
-                )
-                if weight_pct > remaining:
-                    weight_pct = remaining
-            weights[strategy_name] = round(weight_pct / 100.0, 4)
-            remaining = round(remaining - weight_pct, 2)
-
-        params = {"weights": weights}
-        total = sum(weights.values())
-        if abs(total - 1.0) > 0.01:
-            errors.append(f"Strategy weights must sum to 100% (currently {total:.0%})")
-
-    elif allocator_type == "risk_parity":
-        vol_lookback = _state_value(
-            f"{key_prefix}meta_risk_parity_vol_lookback",
-            meta_risk_parity_ui.DEFAULTS["vol_lookback"],
-            draft_meta.get("params", {}).get("vol_lookback", _UNSET) if draft_meta else _UNSET,
-        )
-        params = {"vol_lookback": vol_lookback}
-
-    return {"type": allocator_type, "params": params}, errors
-
-
-def _build_asset_allocator_from_state(
-    key_prefix: str,
-    draft_config: Dict,
-) -> Tuple[Dict, int, List[str]]:
-    """Build asset allocator config from state/draft."""
-    draft_asset = draft_config.get("asset_allocator")
-    allocator_type = _state_value(
-        f"{key_prefix}asset_allocator_type",
-        allocator.DEFAULT_ALLOCATOR_TYPE,
-        draft_asset.get("type", _UNSET) if draft_asset else _UNSET,
-    )
-    params: Dict = {}
-    if allocator_type == "inverse_vol_v1":
-        lookback = _state_value(
-            f"{key_prefix}allocator_inverse_vol_v1_lookback",
-            inverse_vol_ui.DEFAULT_LOOKBACK,
-            draft_asset.get("params", {}).get("lookback", _UNSET) if draft_asset else _UNSET,
-        )
-        params = {"lookback": lookback}
-
-    vol_window = params.get("lookback") or params.get("vol_window")
-    return {"type": allocator_type, "params": params}, vol_window, []
-
-
-def _build_risk_from_state(
-    key_prefix: str,
-    universe: List[str],
-    draft_config: Dict,
-) -> Tuple[Dict[str, object], List[str]]:
-    """Build risk caps and vol targeting config from state/draft."""
-    cap_mode = _state_value(
-        f"{key_prefix}cap_mode",
-        "both",
-        draft_config.get("cap_mode", _UNSET),
-    )
-    max_weight_per_asset = _state_value(
-        f"{key_prefix}max_weight_per_asset",
-        risk.DEFAULT_MAX_WEIGHT_PER_ASSET,
-        draft_config.get("max_weight_per_asset", _UNSET),
-    )
-    use_sector_cap = _state_value(
-        f"{key_prefix}use_sector_cap",
-        False,
-        draft_config.get("max_sector_weight", _UNSET) is not None,
-    )
-    max_sector_weight = _state_value(
-        f"{key_prefix}max_sector_weight",
-        risk.DEFAULT_MAX_SECTOR_WEIGHT,
-        draft_config.get("max_sector_weight", _UNSET),
-    ) if use_sector_cap else None
-    min_assets_held = _state_value(
-        f"{key_prefix}min_assets_held",
-        risk.DEFAULT_MIN_ASSETS_HELD,
-        draft_config.get("min_assets_held", _UNSET),
-    )
-
-    target_vol = _state_value(
-        f"{key_prefix}target_vol",
-        risk.DEFAULT_TARGET_VOL,
-        draft_config.get("target_vol", _UNSET),
-    )
-    vol_lookback = _state_value(
-        f"{key_prefix}vol_lookback",
-        risk.DEFAULT_VOL_LOOKBACK,
-        draft_config.get("vol_lookback", _UNSET),
-    )
-    min_leverage = _state_value(
-        f"{key_prefix}min_leverage",
-        risk.DEFAULT_MIN_LEVERAGE,
-        draft_config.get("min_leverage", _UNSET),
-    )
-    max_leverage = _state_value(
-        f"{key_prefix}max_leverage",
-        risk.DEFAULT_MAX_LEVERAGE,
-        draft_config.get("max_leverage", _UNSET),
-    )
-
-    errors = validate_risk_caps_widget(
-        min_assets_held=min_assets_held,
-        universe=universe,
-        max_weight_per_asset=max_weight_per_asset,
-        max_sector_weight=max_sector_weight,
-    )
-    errors.extend(validate_volatility_targeting_widget(min_leverage, max_leverage))
-
-    return {
-        "max_weight_per_asset": max_weight_per_asset,
-        "max_sector_weight": max_sector_weight,
-        "min_assets_held": min_assets_held,
-        "cap_mode": cap_mode,
-        "target_vol": target_vol,
-        "vol_lookback": vol_lookback,
-        "min_leverage": min_leverage,
-        "max_leverage": max_leverage,
-    }, errors
-
 
 def render(
     universe: List[str],
@@ -660,7 +423,7 @@ def render(
     remove_id = None
     configs: Dict[str, Dict] = {}
     errors: List[str] = []
-    drafts: Dict[str, Dict] = st.session_state.portfolio_drafts
+    configs_store = st.session_state.portfolio_live_configs
 
     for portfolio in portfolios:
         is_active = portfolio["id"] == st.session_state.active_portfolio_id
@@ -678,65 +441,93 @@ def render(
                 portfolio["name"] = name_value
 
             key_prefix = f"{portfolio['id']}_"
-            draft_config = drafts.get(portfolio["id"], {})
-            selected_strategies = _get_selected_strategies(key_prefix, draft_config)
+            config = _ensure_portfolio_config(portfolio["id"])
+            selected_strategies = list(
+                config.get("selected_strategies", strategies.DEFAULT_STRATEGIES)
+            )
+            _ensure_strategy_entries(config, selected_strategies)
+
+            # --- Layer selector ---
             layer_label = _select_layer(expander, portfolio["id"])
             selected_layer_key = LABEL_TO_KEY.get(layer_label, DEFAULT_LAYER_KEY)
 
+            # ===================================================================
+            # STRATEGY LAYER
+            # ===================================================================
             if selected_layer_key == "strategy":
-                _seed_strategy_state(key_prefix, draft_config, selected_strategies)
+                # Build current_values from the config dict
+                strategy_cv = {
+                    "selected_strategies": list(config.get("selected_strategies", strategies.DEFAULT_STRATEGIES)),
+                    "strategies": config.get("strategies", {}),
+                }
                 strat_config = strategies.render(
                     key_prefix=key_prefix,
                     container=expander,
                     show_header=False,
+                    current_values=strategy_cv,
                 )
                 selected_strategies = strat_config["selected_strategies"]
                 strategies_config = strat_config["strategies"]
                 strategy_errors = strat_config["errors"]
-            else:
-                selected_strategies, strategies_config, strategy_errors = _build_strategies_from_state(
-                    key_prefix,
-                    draft_config,
-                )
 
+                # Write back to config
+                config["selected_strategies"] = list(selected_strategies)
+                _ensure_strategy_entries(config, selected_strategies)
+                config["strategies"].update(strategies_config)
+                _sync_fixed_weight_for_selection(config, selected_strategies)
+            else:
+                selected_strategies = list(config.get("selected_strategies", []))
+                strategies_config = _strategy_config_from_config(config, selected_strategies)
+                strategy_errors = _validate_strategies(selected_strategies)
+
+            # ===================================================================
+            # META ALLOCATOR LAYER
+            # ===================================================================
             if selected_layer_key == "meta_allocator":
-                _seed_meta_state(key_prefix, draft_config, selected_strategies)
+                meta_cv = config.get("meta_allocator") or _default_meta_allocator()
                 meta_config = meta.render(
                     selected_strategies,
                     key_prefix=key_prefix,
                     container=expander,
                     show_header=False,
+                    current_values=meta_cv,
                 )
                 if len(selected_strategies) <= 1:
                     expander.info("Meta allocator activates when multiple strategies are selected.")
                 meta_allocator_config = meta_config["meta_allocator"]
                 meta_errors = meta_config["errors"]
+                if len(selected_strategies) > 1 and meta_allocator_config is not None:
+                    config["meta_allocator"] = meta_allocator_config
             else:
-                meta_allocator_config, meta_errors = _build_meta_allocator_from_state(
-                    key_prefix,
-                    selected_strategies,
-                    draft_config,
-                )
+                meta_allocator_config = _meta_allocator_for_run(config, selected_strategies)
+                meta_errors = _validate_meta_allocator(meta_allocator_config, selected_strategies)
 
+            # ===================================================================
+            # ASSET ALLOCATOR LAYER
+            # ===================================================================
             if selected_layer_key == "asset_allocator":
-                _seed_asset_allocator_state(key_prefix, draft_config)
+                allocator_cv = config.get("asset_allocator") or _default_asset_allocator()
                 allocator_config = allocator.render(
                     key_prefix=key_prefix,
                     container=expander,
                     show_header=False,
                     expand_params=True,
+                    current_values=allocator_cv,
                 )
                 asset_allocator_config = allocator_config["asset_allocator"]
-                vol_window = allocator_config["vol_window"]
                 allocator_errors = allocator_config["errors"]
+                config["asset_allocator"] = asset_allocator_config
             else:
-                asset_allocator_config, vol_window, allocator_errors = _build_asset_allocator_from_state(
-                    key_prefix,
-                    draft_config,
-                )
+                asset_allocator_config = _asset_allocator_for_run(config)
+                allocator_errors = []
 
+            vol_window = _vol_window_from_asset_allocator(asset_allocator_config)
+
+            # ===================================================================
+            # RISK CAPS LAYER
+            # ===================================================================
             if selected_layer_key == "risk_caps":
-                _seed_risk_state(key_prefix, draft_config)
+                risk_cv = _build_risk_cv(config)
                 risk_config = risk.render(
                     universe,
                     key_prefix=key_prefix,
@@ -745,10 +536,15 @@ def render(
                     show_risk_caps=True,
                     show_vol_targeting=False,
                     expand_risk_caps=True,
+                    current_values=risk_cv,
                 )
-                risk_errors = risk_config["errors"]
+                _write_risk_back(config, risk_config)
+
+            # ===================================================================
+            # VOLATILITY TARGETING LAYER
+            # ===================================================================
             elif selected_layer_key == "vol_targeting":
-                _seed_risk_state(key_prefix, draft_config)
+                vol_cv = _build_risk_cv(config)
                 risk_config = risk.render(
                     universe,
                     key_prefix=key_prefix,
@@ -757,14 +553,12 @@ def render(
                     show_risk_caps=False,
                     show_vol_targeting=True,
                     expand_vol_targeting=True,
+                    current_values=vol_cv,
                 )
-                risk_errors = risk_config["errors"]
-            else:
-                risk_config, risk_errors = _build_risk_from_state(
-                    key_prefix,
-                    universe,
-                    draft_config,
-                )
+                _write_risk_back(config, risk_config)
+
+            risk_config = _risk_config_for_run(config)
+            risk_errors = _validate_risk_config(config, universe)
 
             portfolio_errors = (
                 strategy_errors
@@ -790,11 +584,6 @@ def render(
                 "min_leverage": risk_config["min_leverage"],
                 "max_leverage": risk_config["max_leverage"],
             }
-            drafts[portfolio["id"]] = _merge_draft_config(
-                draft_config,
-                configs[portfolio["id"]],
-                selected_strategies,
-            )
 
             if expander.button(
                 "Remove Portfolio",
@@ -804,8 +593,8 @@ def render(
 
     if remove_id:
         st.session_state.portfolios = [p for p in portfolios if p["id"] != remove_id]
-        if remove_id in st.session_state.portfolio_drafts:
-            del st.session_state.portfolio_drafts[remove_id]
+        if remove_id in configs_store:
+            del configs_store[remove_id]
         layer_key = f"{remove_id}_layer"
         if layer_key in st.session_state:
             del st.session_state[layer_key]

@@ -36,13 +36,15 @@ def _clamp_state(key: str, min_value: float, max_value: float) -> None:
         st.session_state[key] = max_value
 
 
-def render_params(key_prefix: str) -> Dict[str, Any]:
+def render_params(key_prefix: str, current_values: Dict[str, Any] = None) -> Dict[str, Any]:
     """Render Mean Reversion strategy parameters and return params dict."""
+    cv = current_values or {}
+
     rsi_period = st.slider(
         "RSI period (days)",
         min_value=BOUNDS["rsi_period"][0],
         max_value=BOUNDS["rsi_period"][1],
-        value=DEFAULTS["rsi_period"],
+        value=cv.get("rsi_period", DEFAULTS["rsi_period"]),
         step=BOUNDS["rsi_period"][2],
         help="Window length for RSI calculation",
         key=f"{key_prefix}rsi_period",
@@ -52,23 +54,23 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         "RSI oversold",
         min_value=BOUNDS["rsi_oversold"][0],
         max_value=BOUNDS["rsi_oversold"][1],
-        value=DEFAULTS["rsi_oversold"],
+        value=cv.get("rsi_oversold", DEFAULTS["rsi_oversold"]),
         step=BOUNDS["rsi_oversold"][2],
         help="Buy signal threshold",
         key=f"{key_prefix}rsi_oversold",
     )
 
     rsi_overbought_min = max(BOUNDS["rsi_overbought"][0], rsi_oversold + 1)
-    rsi_overbought_default = DEFAULTS["rsi_overbought"]
-    if rsi_overbought_default < rsi_overbought_min:
-        rsi_overbought_default = rsi_overbought_min
+    rsi_overbought_val = cv.get("rsi_overbought", DEFAULTS["rsi_overbought"])
+    if rsi_overbought_val < rsi_overbought_min:
+        rsi_overbought_val = rsi_overbought_min
     _clamp_state(f"{key_prefix}rsi_overbought", rsi_overbought_min, BOUNDS["rsi_overbought"][1])
 
     rsi_overbought = st.slider(
         "RSI overbought",
         min_value=rsi_overbought_min,
         max_value=BOUNDS["rsi_overbought"][1],
-        value=rsi_overbought_default,
+        value=rsi_overbought_val,
         step=BOUNDS["rsi_overbought"][2],
         help="Sell signal threshold",
         key=f"{key_prefix}rsi_overbought",
@@ -78,7 +80,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         "Bollinger Bands period (days)",
         min_value=BOUNDS["bb_period"][0],
         max_value=BOUNDS["bb_period"][1],
-        value=DEFAULTS["bb_period"],
+        value=cv.get("bb_period", DEFAULTS["bb_period"]),
         step=BOUNDS["bb_period"][2],
         help="Window length for Bollinger Bands",
         key=f"{key_prefix}bb_period",
@@ -88,7 +90,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         "Bollinger Bands std dev",
         min_value=BOUNDS["bb_std"][0],
         max_value=BOUNDS["bb_std"][1],
-        value=DEFAULTS["bb_std"],
+        value=cv.get("bb_std", DEFAULTS["bb_std"]),
         step=BOUNDS["bb_std"][2],
         help="Standard deviation multiplier",
         key=f"{key_prefix}bb_std",
@@ -98,7 +100,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         "Z-Score lookback (days)",
         min_value=BOUNDS["zscore_lookback"][0],
         max_value=BOUNDS["zscore_lookback"][1],
-        value=DEFAULTS["zscore_lookback"],
+        value=cv.get("zscore_lookback", DEFAULTS["zscore_lookback"]),
         step=BOUNDS["zscore_lookback"][2],
         help="Window length for Z-Score",
         key=f"{key_prefix}zscore_lookback",
@@ -108,7 +110,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         "Z-Score threshold",
         min_value=BOUNDS["zscore_threshold"][0],
         max_value=BOUNDS["zscore_threshold"][1],
-        value=DEFAULTS["zscore_threshold"],
+        value=cv.get("zscore_threshold", DEFAULTS["zscore_threshold"]),
         step=BOUNDS["zscore_threshold"][2],
         help="Higher threshold = fewer trades",
         key=f"{key_prefix}zscore_threshold",
@@ -116,8 +118,8 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
 
     method_options = [method for method, _ in COMBINATION_METHODS]
     method_labels = {method: label for method, label in COMBINATION_METHODS}
-    default_method = DEFAULTS["combination_method"]
-    method_index = method_options.index(default_method) if default_method in method_options else 0
+    current_method = cv.get("combination_method", DEFAULTS["combination_method"])
+    method_index = method_options.index(current_method) if current_method in method_options else 0
 
     combination_method = st.selectbox(
         "Signal combination method",
@@ -128,8 +130,8 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
         key=f"{key_prefix}combination_method",
     )
 
-    weights = list(DEFAULTS["weights"])
-    weighted_threshold = DEFAULTS["weighted_threshold"]
+    weights = list(cv.get("weights", DEFAULTS["weights"]))
+    weighted_threshold = cv.get("weighted_threshold", DEFAULTS["weighted_threshold"])
 
     if combination_method == "weighted":
         st.markdown("**Weights (sum to 1)**")
@@ -140,13 +142,13 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
             "RSI weight",
             min_value=0.0,
             max_value=1.0,
-            value=weights[0],
+            value=weights[0] if weights else DEFAULTS["weights"][0],
             step=weight_step,
             key=f"{key_prefix}weight_rsi",
         )
 
         max_bb_weight = max(0.0, 1.0 - weight_rsi)
-        default_bb_weight = weights[1]
+        default_bb_weight = weights[1] if len(weights) > 1 else DEFAULTS["weights"][1]
         if default_bb_weight > max_bb_weight:
             default_bb_weight = max_bb_weight
 
@@ -174,7 +176,7 @@ def render_params(key_prefix: str) -> Dict[str, Any]:
             "Weighted threshold",
             min_value=BOUNDS["weighted_threshold"][0],
             max_value=BOUNDS["weighted_threshold"][1],
-            value=DEFAULTS["weighted_threshold"],
+            value=cv.get("weighted_threshold", DEFAULTS["weighted_threshold"]),
             step=BOUNDS["weighted_threshold"][2],
             help="Lower threshold = more aggressive, higher = more conservative",
             key=f"{key_prefix}weighted_threshold",

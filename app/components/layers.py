@@ -10,6 +10,6 @@ PIPELINE_STEPS = [
     ("vol_targeting", "Volatility Targeting"),
 ]
 
-LAYER_DEFINITIONS = list(PIPELINE_STEPS)
-LAYER_LABELS = {key: label for key, label in LAYER_DEFINITIONS}
-LABEL_TO_KEY = {label: key for key, label in LAYER_DEFINITIONS}
+LAYER_LABELS = {key: label for key, label in PIPELINE_STEPS}
+LABEL_TO_KEY = {label: key for key, label in PIPELINE_STEPS}
+

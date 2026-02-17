@@ -18,9 +18,13 @@ def render(
     container: Optional[st.delta_generator.DeltaGenerator] = None,
     show_header: bool = True,
     expand_params: bool = False,
+    current_values: Dict = None,
 ) -> Dict:
     """
     Render asset allocator UI.
+
+    Args:
+        current_values: Dict with 'type' and 'params' from the portfolio config.
 
     Returns:
         dict with keys:
@@ -29,6 +33,7 @@ def render(
             - errors: list of validation error strings
     """
     container = container or st.sidebar
+    cv = current_values or {}
     errors = []
 
     if show_header:
@@ -39,8 +44,11 @@ def render(
     allocator_options = list(PORTFOLIO_ALLOCATOR_SPECS.keys())
     format_func = lambda x: get_portfolio_allocator_spec(x).display_name
 
+    current_type = cv.get("type", DEFAULT_ALLOCATOR_TYPE)
     default_index = 0
-    if DEFAULT_ALLOCATOR_TYPE in allocator_options:
+    if current_type in allocator_options:
+        default_index = allocator_options.index(current_type)
+    elif DEFAULT_ALLOCATOR_TYPE in allocator_options:
         default_index = allocator_options.index(DEFAULT_ALLOCATOR_TYPE)
 
     allocator_type = container.radio(
@@ -52,6 +60,8 @@ def render(
         key=f"{key_prefix}asset_allocator_type",
     )
 
+    allocator_params_cv = cv.get("params", {}) if cv.get("type") == allocator_type else {}
+
     expander = container.expander("Asset Allocator Parameters", expanded=expand_params)
     with expander:
         spec = get_portfolio_allocator_spec(allocator_type)
@@ -60,7 +70,10 @@ def render(
 
         params = {}
         if spec.render_params is not None:
-            params = spec.render_params(key_prefix=f"{key_prefix}allocator_{allocator_type}_")
+            params = spec.render_params(
+                key_prefix=f"{key_prefix}allocator_{allocator_type}_",
+                current_values=allocator_params_cv,
+            )
         else:
             expander.caption("_No parameters_")
 
@@ -76,5 +89,4 @@ def render(
         },
         "vol_window": vol_window,
         "errors": errors,
-    }
-    
+    }    
