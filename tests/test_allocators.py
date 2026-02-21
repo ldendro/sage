@@ -11,7 +11,6 @@ from sage_core.allocators.inverse_vol_v1 import (
     compute_equal_weights,
 )
 from sage_core.data.loader import load_universe
-from sage_core.strategies.passthrough import PassthroughStrategy
 from sage_core.portfolio.constructor import align_asset_returns
 
 
@@ -26,8 +25,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-03-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Compute weights
         weights = compute_inverse_vol_weights(returns_wide, lookback=20)
@@ -48,8 +46,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-02-29",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         weights = compute_inverse_vol_weights(returns_wide, lookback=20)
         
@@ -66,8 +63,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         lookback = 10
         weights = compute_inverse_vol_weights(returns_wide, lookback=lookback)
@@ -108,8 +104,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-02-29",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         max_weight = 0.4
         weights = compute_inverse_vol_weights(
@@ -129,8 +124,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         with pytest.raises(ValueError, match="lookback must be >= 2"):
             compute_inverse_vol_weights(returns_wide, lookback=1)
@@ -142,8 +136,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         with pytest.raises(ValueError, match="max_weight must be > 0"):
             compute_inverse_vol_weights(returns_wide, max_weight=0)
@@ -158,8 +151,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # max_weight = 0.3 < 1/3 = 0.333... would cause underinvestment
         with pytest.raises(ValueError, match="max_weight.*too small.*assets"):
@@ -180,8 +172,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # min_vol = 0 would cause division by zero
         with pytest.raises(ValueError, match="min_vol must be > 0"):
@@ -233,8 +224,7 @@ class TestComputeInverseVolWeights:
             start_date="2020-01-01",
             end_date="2020-02-29",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         weights = compute_inverse_vol_weights(returns_wide, lookback=20)
         
@@ -253,8 +243,7 @@ class TestComputeEqualWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         weights = compute_equal_weights(returns_wide)
         
@@ -271,8 +260,7 @@ class TestComputeEqualWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         weights = compute_equal_weights(returns_wide)
         
@@ -286,8 +274,7 @@ class TestComputeEqualWeights:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         weights = compute_equal_weights(returns_wide)
         

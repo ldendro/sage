@@ -85,22 +85,23 @@ def calculate_warmup_period(
     """
     Calculate total warmup period needed for all system components.
     
-    Warmup is calculated sequentially in TRADING DAYS:
-    1. strategy_warmup days to generate valid strategy returns (meta_raw_ret)
-    2. meta_allocator_warmup days to combine strategy returns (if multi-strategy)
-    3. vol_window days to generate first weights (inverse vol on combined returns)
-    4. 1 day for first portfolio return
-    5. vol_lookback days to accumulate portfolio returns for vol targeting
+    The asset allocator uses raw price returns (not strategy returns), so its
+    warmup runs in PARALLEL with the strategy + meta layers.
     
-    Timeline example (Trend+MeanRev, Risk Parity meta allocator):
+    Warmup formula (in TRADING DAYS):
+        signal_warmup   = strategy_warmup + meta_allocator_warmup
+        parallel_warmup = max(signal_warmup, asset_allocator_warmup)
+        total           = parallel_warmup + 1 + vol_lookback
+    
+    Timeline example (Trend+MeanRev, Risk Parity meta allocator, vol_window=60):
     - Day 1-253: Strategy warmup (max of Trend=253, MeanRev=60)
+    - Day 1-60:  Asset allocator warmup (inverse vol, runs in parallel)
     - Day 254-313: Meta allocator warmup (Risk Parity needs 60 days)
-    - Day 314-373: Asset allocator warmup (inverse vol needs 60 days)
-    - Day 374: First weights generated, first portfolio return
-    - Day 375-434: Portfolio returns accumulate (leverage = 1.0)
-    - Day 435: Vol targeting activates (60 days of portfolio returns available)
+    - Day 314: First weights + strategy returns ready, first portfolio return
+    - Day 315-374: Portfolio returns accumulate (leverage = 1.0)
+    - Day 375: Vol targeting activates (60 days of portfolio returns available)
     
-    Total warmup = strategy + meta_allocator + vol_window + 1 + vol_lookback
+    Total warmup = max(253 + 60, 60) + 1 + 60 = 374
     
     Note: The engine uses pandas market calendars to go back this many business days,
     automatically accounting for weekends and holidays.
@@ -115,7 +116,9 @@ def calculate_warmup_period(
         Dictionary with:
             - strategy_warmup: int
             - meta_allocator_warmup: int
+            - signal_warmup: int (strategy + meta)
             - asset_allocator_warmup: int
+            - parallel_warmup: int (max of signal vs allocator)
             - first_return: int (always 1)
             - vol_targeting_warmup: int
             - total_trading_days: int
@@ -130,7 +133,7 @@ def calculate_warmup_period(
         ...     vol_lookback=60,
         ... )
         >>> warmup['total_trading_days']
-        374  # 253 + 0 + 60 + 1 + 60
+        314  # max(253, 60) + 1 + 60
         
         >>> # Multi-strategy with Risk Parity
         >>> warmup = calculate_warmup_period(
@@ -140,7 +143,7 @@ def calculate_warmup_period(
         ...     vol_lookback=60,
         ... )
         >>> warmup['total_trading_days']
-        434  # 253 + 60 + 60 + 1 + 60
+        374  # max(253 + 60, 60) + 1 + 60
     """
     # Calculate strategy warmup using helper function
     strategy_warmup_days = calculate_strategy_warmup(strategies)
@@ -151,8 +154,14 @@ def calculate_warmup_period(
         meta_allocator, num_strategies
     )
     
-    # Asset allocator warmup (inverse vol)
+    # Signal warmup (strategy + meta, sequential)
+    signal_warmup = strategy_warmup_days + meta_allocator_warmup_days
+    
+    # Asset allocator warmup (inverse vol) — runs in parallel with signal warmup
     asset_allocator_warmup = vol_window
+    
+    # Parallel warmup: allocator uses raw price returns, not strategy returns
+    parallel_warmup = max(signal_warmup, asset_allocator_warmup)
     
     # First return day
     first_return_day = 1
@@ -160,31 +169,38 @@ def calculate_warmup_period(
     # Vol targeting warmup
     vol_targeting_warmup = vol_lookback
     
-    # Total warmup (sequential)
-    total_trading_days = (
-        strategy_warmup_days + 
-        meta_allocator_warmup_days +
-        asset_allocator_warmup + 
-        first_return_day + 
-        vol_targeting_warmup
-    )
+    # Total warmup (parallel model)
+    total_trading_days = parallel_warmup + first_return_day + vol_targeting_warmup
     
     # Build description
-    parts = []
+    signal_parts = []
     if strategy_warmup_days > 0:
-        parts.append(f"Strategy ({strategy_warmup_days}d)")
+        signal_parts.append(f"Strategy ({strategy_warmup_days}d)")
     if meta_allocator_warmup_days > 0:
-        parts.append(f"Meta allocator ({meta_allocator_warmup_days}d)")
-    parts.append(f"Asset allocator ({asset_allocator_warmup}d)")
-    parts.append(f"First return ({first_return_day}d)")
-    parts.append(f"Vol targeting ({vol_targeting_warmup}d)")
+        signal_parts.append(f"Meta ({meta_allocator_warmup_days}d)")
     
-    description = " + ".join(parts) + f" = {total_trading_days} trading days"
+    if signal_parts:
+        signal_str = " + ".join(signal_parts)
+        description = (
+            f"max({signal_str}, Allocator ({asset_allocator_warmup}d))"
+            f" + First return ({first_return_day}d)"
+            f" + Vol targeting ({vol_targeting_warmup}d)"
+            f" = {total_trading_days} trading days"
+        )
+    else:
+        description = (
+            f"Allocator ({asset_allocator_warmup}d)"
+            f" + First return ({first_return_day}d)"
+            f" + Vol targeting ({vol_targeting_warmup}d)"
+            f" = {total_trading_days} trading days"
+        )
     
     return {
         "strategy_warmup": strategy_warmup_days,
         "meta_allocator_warmup": meta_allocator_warmup_days,
+        "signal_warmup": signal_warmup,
         "asset_allocator_warmup": asset_allocator_warmup,
+        "parallel_warmup": parallel_warmup,
         "first_return": first_return_day,
         "vol_targeting_warmup": vol_targeting_warmup,
         "total_trading_days": total_trading_days,

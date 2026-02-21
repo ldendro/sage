@@ -120,3 +120,43 @@ def build_portfolio_raw_returns(
     portfolio_returns = (returns_wide * weights_aligned).sum(axis=1)
     
     return portfolio_returns
+
+
+def build_active_mask(
+    weights_wide: pd.DataFrame,
+    returns_wide: pd.DataFrame,
+    eps: float = 1e-12,
+) -> pd.Series:
+    """
+    Build a boolean mask identifying active (non-warmup) portfolio days.
+    
+    A day is active if:
+      (1) weights are fully defined (no NaNs), AND
+      (2) returns exist for the assets that actually have exposure that day
+          (i.e. where abs(weight) > eps).
+    
+    This handles the parallel warmup model where weights (from the asset
+    allocator) and strategy returns (from the strategy + meta layers) may
+    become available at different times.
+    
+    Args:
+        weights_wide: Wide DataFrame of portfolio weights (dates × symbols)
+        returns_wide: Wide DataFrame of asset returns  (dates × symbols)
+        eps: Threshold below which a weight is considered zero (default: 1e-12)
+    
+    Returns:
+        Boolean Series (True = active, False = warmup/missing).
+        Index matches weights_wide / returns_wide.
+    
+    Example:
+        >>> mask = build_active_mask(capped_weights, alpha_returns_wide)
+        >>> masked_returns = raw_portfolio_returns.where(mask, np.nan)
+    """
+    # (1) All weights must be present
+    weights_ready = ~weights_wide.isna().any(axis=1)
+
+    # (2) Returns must exist where the portfolio has exposure
+    missing_weighted_returns = (weights_wide.abs() > eps) & returns_wide.isna()
+    returns_ready = ~missing_weighted_returns.any(axis=1)
+
+    return weights_ready & returns_ready
