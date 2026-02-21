@@ -9,7 +9,7 @@ from sage_core.data.loader import load_universe
 from sage_core.strategies import get_strategy
 from sage_core.meta import get_meta_allocator
 from sage_core.allocators.inverse_vol_v1 import compute_inverse_vol_weights
-from sage_core.portfolio.constructor import align_asset_returns, build_portfolio_raw_returns
+from sage_core.portfolio.constructor import align_asset_returns, build_portfolio_raw_returns, build_active_mask
 from sage_core.portfolio.risk_caps import apply_all_risk_caps
 from sage_core.portfolio.vol_targeting import apply_vol_targeting
 from sage_core.metrics.performance import calculate_all_metrics
@@ -44,14 +44,21 @@ def run_system_walkforward(
     Run complete walkforward backtest.
     
     This orchestrates the full pipeline:
+    0. Calculate warmup period
     1. Load OHLCV data
-    2. Run passthrough strategy (adds meta_raw_ret column)
-    3. Align asset returns (extracts meta_raw_ret)
-    4. Compute inverse volatility weights
-    5. Apply risk caps
-    6. Build portfolio returns
-    7. Apply volatility targeting
-    8. Calculate metrics
+    2. Align raw price returns for asset allocator (raw_ret)
+    3. Run strategies (adds meta_raw_ret column)
+    4. Combine strategies via meta allocator (if multi-strategy)
+    5. Align alpha returns (meta_raw_ret)
+    6. Compute inverse volatility weights (from raw_returns_wide)
+    7. Apply risk caps
+    8. Build portfolio returns (alpha_returns_wide × weights)
+    9. Apply volatility targeting
+    10. Reapply risk caps
+    11. Build final portfolio returns (with post-leverage caps applied)
+    12. Filter by date - remove warmup period
+    13. Filter out rows with NaN weights
+    14. Calculate metrics
     
     Args:
         universe: List of symbols to trade
@@ -94,7 +101,7 @@ def run_system_walkforward(
     if strategies is None:
         strategies = {'passthrough': {'params': {}}}
     
-    # Calculate warmup period using abstracted function
+    # STEP 0: Calculate warmup period using abstracted function
     warmup_info = calculate_warmup_period(
         strategies=strategies,
         meta_allocator=meta_allocator,
@@ -105,14 +112,12 @@ def run_system_walkforward(
     
     logger.info(f"Warmup period: {warmup_trading_days} trading days ({warmup_info['description']})")
     
-    # Get first trading day on or after user's start_date
-    # (in case they specified a weekend/holiday)
+    # Get first trading day on or after user's start_date (in case they specified a weekend/holiday)
     actual_start_date = get_first_trading_day_on_or_after(start_date)
     if actual_start_date != start_date:
         logger.info(f"Adjusted start_date from {start_date} to {actual_start_date} (first trading day)")
     
-    # Calculate exact warmup start date using NYSE trading calendar
-    # This goes back exactly warmup_trading_days from actual_start_date
+    # Calculate exact warmup start date using NYSE trading calendar (goes back exactly warmup_trading_days from actual_start_date)
     warmup_start_date = get_warmup_start_date(
         start_date=actual_start_date,
         warmup_trading_days=warmup_trading_days,
@@ -120,15 +125,17 @@ def run_system_walkforward(
     
     logger.info(f"Loading data from {warmup_start_date} to {end_date}")
     
-    # Step 1: Load data including warmup period
+    # STEP 1: Load data including warmup period
     ohlcv_data = load_universe(
         universe=universe,
-        start_date=warmup_start_date,  # Load extra data for warmup
+        start_date=warmup_start_date,  
         end_date=end_date,
     )
     
+    # STEP 2: Align raw price returns for the asset allocator
+    raw_returns_wide = align_asset_returns(ohlcv_data, return_col='raw_ret')
     
-    # Step 2: Run strategies
+    # STEP 3: Run strategies
     strategy_instances = {}
     strategy_results = {}
     
@@ -141,7 +148,7 @@ def run_system_walkforward(
         logger.info(f"Running strategy: {strategy_name}")
         strategy_results[strategy_name] = strategy_instances[strategy_name].run(ohlcv_data)
     
-    # Step 3: Combine strategies using meta allocator (if multiple strategies)
+    # STEP 4: Combine strategies using meta allocator (if multiple strategies)
     if len(strategies) == 1:
         # Single strategy: use returns directly (skip meta allocator)
         logger.info("Single strategy detected - skipping meta allocator")
@@ -182,8 +189,8 @@ def run_system_walkforward(
         
         strategy_data = combined_data
     
-    # Step 4: Align asset returns (uses meta_raw_ret from strategy/meta allocator)
-    asset_returns = align_asset_returns(asset_data=strategy_data)
+    # STEP 5: Align alpha returns (strategy-transformed meta_raw_ret)
+    alpha_returns_wide = align_asset_returns(asset_data=strategy_data)
     
     # Validate cap_mode
     valid_cap_modes = ["both", "pre_leverage", "post_leverage"]
@@ -192,13 +199,14 @@ def run_system_walkforward(
             f"Invalid cap_mode: {cap_mode}. Must be one of {valid_cap_modes}"
         )
     
-    # Step 4: Compute allocations (inverse vol)
+    # STEP 6: Compute allocations (inverse vol on raw price returns)
+    # The allocator warmup runs in parallel with strategy+meta warmup
     allocated_weights = compute_inverse_vol_weights(
-        returns_wide=asset_returns,
+        returns_wide=raw_returns_wide,
         lookback=vol_window,
     )
     
-    # Step 5: Apply risk caps (pre-leverage)
+    # STEP 7: Apply risk caps (pre-leverage)
     if cap_mode in ["pre_leverage", "both"]:
         logger.info(f"Applying pre-leverage risk caps (mode: {cap_mode})")
         capped_weights = apply_all_risk_caps(
@@ -212,23 +220,24 @@ def run_system_walkforward(
         logger.info(f"Skipping pre-leverage risk caps (mode: {cap_mode})")
         capped_weights = allocated_weights
     
-    # Step 6: Build portfolio returns (before vol targeting)
+    # STEP 8: Build portfolio returns (before vol targeting)
     raw_portfolio_returns = build_portfolio_raw_returns(
-        returns_wide=asset_returns,
+        returns_wide=alpha_returns_wide,
         weights_wide=capped_weights,
     )
     
-    # CRITICAL: Mask returns where weights are NaN (warmup period)
-    # build_portfolio_raw_returns uses sum(skipna=True), so NaN weights → 0.0 returns
-    # If we pass these 0.0 returns to vol_targeting, the rolling vol window will
-    # include artificial zeros, understate realized volatility, and drive leverage
-    # to max cap regardless of true risk (biasing early results)
-    # Solution: Set returns to NaN where any weight is NaN
-    weight_is_nan_mask = capped_weights.isna().any(axis=1)
-    raw_portfolio_returns_masked = raw_portfolio_returns.copy()
-    raw_portfolio_returns_masked[weight_is_nan_mask] = np.nan
+    # CRITICAL: Mask returns during warmup period
+    # Under the parallel warmup model, weights (from raw_ret) and alpha returns
+    # (from meta_raw_ret) may become valid at different times.
+    # A day is active only when:
+    #   (1) All weights are defined (allocator warmup complete), AND
+    #   (2) Returns exist for assets with actual exposure (strategy warmup complete)
+    # Without this masking, artificial zeros from NaN weights/returns would
+    # understate realized volatility and bias vol-targeting leverage.
+    active_mask_pre_vol = build_active_mask(capped_weights, alpha_returns_wide)
+    raw_portfolio_returns_masked = raw_portfolio_returns.where(active_mask_pre_vol, np.nan)
     
-    # Step 7: Apply volatility targeting (with masked returns)
+    # STEP 9: Apply volatility targeting (with masked returns)
     vol_targeted_weights = apply_vol_targeting(
         portfolio_returns=raw_portfolio_returns_masked,
         weights_df=capped_weights,
@@ -238,7 +247,7 @@ def run_system_walkforward(
         max_leverage=max_leverage,
     )
     
-    # Step 7b: Reapply risk caps after vol targeting (post-leverage)
+    # STEP 10: Reapply risk caps after vol targeting (post-leverage)
     # CRITICAL: Vol targeting scales weights by leverage (can be >1.0)
     # This means a 0.25 cap becomes 0.50 at 2× leverage, violating limits
     # We reapply caps to ensure absolute exposure limits are always respected
@@ -255,20 +264,17 @@ def run_system_walkforward(
         logger.info(f"Skipping post-leverage risk caps (mode: {cap_mode})")
         final_weights = vol_targeted_weights
     
-    # Step 8: Build final portfolio returns (with post-leverage caps applied)
+    # STEP 11: Build final portfolio returns (with post-leverage caps applied)
     final_portfolio_returns = build_portfolio_raw_returns(
-        returns_wide=asset_returns,
+        returns_wide=alpha_returns_wide,
         weights_wide=final_weights,
     )
     
+    # STEP 12: Filter by date - remove warmup period
     # Slice results to start at actual_start_date (first trading day on or after user's start_date)
     # This ensures equity curve starts exactly at the first trading day
     # All warmup period data is excluded from final results
-    
-    # Use actual_start_date (which is the first trading day on or after user's start_date)
     start_date_ts = pd.Timestamp(actual_start_date)
-    
-    # Step 1: Filter by date - remove warmup period
     valid_mask = final_weights.index >= start_date_ts
     clean_index = final_weights.index[valid_mask]
     
@@ -280,14 +286,14 @@ def run_system_walkforward(
     
     logger.info(f"Results start at {clean_index[0].strftime('%Y-%m-%d')} (user requested {start_date})")
     
-    # Apply date filter to all outputs
+    # Apply date filter to all outputs to ensure alignment
     final_portfolio_returns_filtered = final_portfolio_returns.loc[clean_index]
     final_weights_filtered = final_weights.loc[clean_index]
     vol_targeted_weights_filtered = vol_targeted_weights.loc[clean_index]
-    asset_returns_filtered = asset_returns.loc[clean_index]
+    alpha_returns_filtered = alpha_returns_wide.loc[clean_index]
     capped_weights_filtered = capped_weights.loc[clean_index]
     
-    # Step 2: Filter out rows with NaN weights
+    # STEP 13: Filter out rows with NaN weights
     # This handles IPOs, delisted stocks, or data gaps that can appear after start_date
     # Drop rows where ANY weight is NaN (incomplete data for that day)
     nan_mask = ~final_weights_filtered.isna().any(axis=1)
@@ -308,22 +314,24 @@ def run_system_walkforward(
     final_portfolio_returns_clean = final_portfolio_returns_filtered.loc[clean_index_no_nan]
     final_weights_clean = final_weights_filtered.loc[clean_index_no_nan]
     vol_targeted_weights_clean = vol_targeted_weights_filtered.loc[clean_index_no_nan]
-    asset_returns_clean = asset_returns_filtered.loc[clean_index_no_nan]
+    alpha_returns_clean = alpha_returns_filtered.loc[clean_index_no_nan]
     capped_weights_clean = capped_weights_filtered.loc[clean_index_no_nan]
     
-    # Step 9: Build equity curve (starting at 100)
+    # STEP 14: Calculate Metrics (Equity curve, drawdown series, other metrics)
+    
+    # Build equity curve (starting at 100)
     equity_curve = (1 + final_portfolio_returns_clean).cumprod() * 100
     
     # Calculate drawdown series for charting
     running_max = equity_curve.expanding().max()
     drawdown_series = (equity_curve - running_max) / running_max
     
-    # Step 10: Calculate metrics
+    # Other key metrics
     metrics = calculate_all_metrics(
         returns=final_portfolio_returns_clean,
         equity_curve=equity_curve,
         weights_df=final_weights_clean,
-        returns_df=asset_returns_clean,
+        returns_df=alpha_returns_clean,
     )
     
     return {
@@ -334,7 +342,7 @@ def run_system_walkforward(
         "vol_targeted_weights": vol_targeted_weights_clean,  # Pre-cap weights (for analysis)
         "raw_weights": capped_weights_clean,  # Pre-vol-targeting weights
         "metrics": metrics,
-        "asset_returns": asset_returns_clean,
+        "asset_returns": alpha_returns_clean,
         "warmup_info": warmup_info,  # Warmup period breakdown
         "warmup_start_date": warmup_start_date,  # Actual start date for data loading
         "strategies_used": list(strategies.keys()),

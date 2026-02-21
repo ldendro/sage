@@ -99,7 +99,9 @@ class TestCalculateWarmupPeriod:
         assert "total_trading_days" in warmup
         assert "strategy_warmup" in warmup
         assert "meta_allocator_warmup" in warmup
+        assert "signal_warmup" in warmup
         assert "asset_allocator_warmup" in warmup
+        assert "parallel_warmup" in warmup
         assert "first_return" in warmup
         assert "vol_targeting_warmup" in warmup
         assert "description" in warmup
@@ -108,6 +110,8 @@ class TestCalculateWarmupPeriod:
         assert isinstance(warmup["total_trading_days"], int)
         assert isinstance(warmup["strategy_warmup"], int)
         assert isinstance(warmup["meta_allocator_warmup"], int)
+        assert isinstance(warmup["signal_warmup"], int)
+        assert isinstance(warmup["parallel_warmup"], int)
         assert isinstance(warmup["description"], str)
     
     def test_description_format(self):
@@ -123,7 +127,7 @@ class TestCalculateWarmupPeriod:
         assert "60" in description
         assert "90" in description
         assert "151" in description  # Total trading days
-        assert "Asset allocator" in description
+        assert "Allocator" in description
         assert "Vol targeting" in description
         assert "First return" in description
         assert "trading days" in description
@@ -244,13 +248,15 @@ class TestIntegratedWarmupCalculation:
             vol_lookback=60,
         )
         
-        # 253 (strategy) + 0 (meta) + 60 (asset) + 1 + 60 (vol) = 374
+        # max(253 + 0, 60) + 1 + 60 = 314
         assert warmup['strategy_warmup'] == 253
         assert warmup['meta_allocator_warmup'] == 0
+        assert warmup['signal_warmup'] == 253
         assert warmup['asset_allocator_warmup'] == 60
+        assert warmup['parallel_warmup'] == 253
         assert warmup['first_return'] == 1
         assert warmup['vol_targeting_warmup'] == 60
-        assert warmup['total_trading_days'] == 374
+        assert warmup['total_trading_days'] == 314
     
     def test_multi_strategy_fixed_weight(self):
         """Test total warmup for multi-strategy with FixedWeight."""
@@ -261,10 +267,12 @@ class TestIntegratedWarmupCalculation:
             vol_lookback=60,
         )
         
-        # 253 (max strategy) + 0 (FixedWeight) + 60 (asset) + 1 + 60 (vol) = 374
+        # max(253 + 0, 60) + 1 + 60 = 314
         assert warmup['strategy_warmup'] == 253
         assert warmup['meta_allocator_warmup'] == 0
-        assert warmup['total_trading_days'] == 374
+        assert warmup['signal_warmup'] == 253
+        assert warmup['parallel_warmup'] == 253
+        assert warmup['total_trading_days'] == 314
     
     def test_multi_strategy_risk_parity(self):
         """Test total warmup for multi-strategy with RiskParity."""
@@ -275,13 +283,15 @@ class TestIntegratedWarmupCalculation:
             vol_lookback=60,
         )
         
-        # 253 (max strategy) + 60 (RiskParity) + 60 (asset) + 1 + 60 (vol) = 434
+        # max(253 + 60, 60) + 1 + 60 = 374
         assert warmup['strategy_warmup'] == 253
         assert warmup['meta_allocator_warmup'] == 60
+        assert warmup['signal_warmup'] == 313
         assert warmup['asset_allocator_warmup'] == 60
+        assert warmup['parallel_warmup'] == 313
         assert warmup['first_return'] == 1
         assert warmup['vol_targeting_warmup'] == 60
-        assert warmup['total_trading_days'] == 434
+        assert warmup['total_trading_days'] == 374
     
     def test_warmup_description_includes_all_layers(self):
         """Test description includes all warmup layers."""
@@ -294,8 +304,8 @@ class TestIntegratedWarmupCalculation:
         
         description = warmup['description']
         assert 'Strategy (253d)' in description
-        assert 'Meta allocator (60d)' in description
-        assert 'Asset allocator (60d)' in description
+        assert 'Meta (60d)' in description
+        assert 'Allocator (60d)' in description
         assert 'First return (1d)' in description
         assert 'Vol targeting (60d)' in description
-        assert '434 trading days' in description
+        assert '374 trading days' in description

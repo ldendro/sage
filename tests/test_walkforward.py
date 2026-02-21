@@ -235,6 +235,8 @@ class TestMultiStrategyIntegration:
         # Verify warmup
         assert result['warmup_info']['strategy_warmup'] == 253
         assert result['warmup_info']['meta_allocator_warmup'] == 0
+        assert result['warmup_info']['signal_warmup'] == 253
+        assert result['warmup_info']['parallel_warmup'] == 253
         
         # Verify results exist
         assert len(result['returns']) > 0
@@ -308,9 +310,10 @@ class TestMultiStrategyIntegration:
         # Verify warmup includes Risk Parity warmup
         assert result['warmup_info']['strategy_warmup'] == 253
         assert result['warmup_info']['meta_allocator_warmup'] == 60
+        assert result['warmup_info']['signal_warmup'] == 313
         
-        # Total warmup = 253 + 60 + 60 + 1 + 60 = 434
-        assert result['warmup_info']['total_trading_days'] == 434
+        # Total warmup = max(253 + 60, 60) + 1 + 60 = 374
+        assert result['warmup_info']['total_trading_days'] == 374
         
         # Verify results
         assert len(result['returns']) > 0
