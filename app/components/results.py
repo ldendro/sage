@@ -352,6 +352,7 @@ def render_metadata_tab(
 
     if warmup_rows:
         st.markdown("#### Warmup Summary")
+        st.markdown("Warmup period is the time required for the strategy to learn market conditions before live trading begins. This period is excluded from the final results. The total warmup calculation is: max(strategy + meta allocator, asset allocator) + 1 trading day + Vol targeting")
         st.dataframe(pd.DataFrame(warmup_rows), width='stretch', hide_index=True)
 
     st.markdown("---")

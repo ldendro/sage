@@ -156,7 +156,7 @@ def build_active_mask(
     weights_ready = ~weights_wide.isna().any(axis=1)
 
     # (2) Returns must exist where the portfolio has exposure
-    missing_weighted_returns = (weights_wide.abs() > eps) & returns_wide.isna()
-    returns_ready = ~missing_weighted_returns.any(axis=1)
+    missing_returns_with_exposure = (weights_wide.abs() > eps) & returns_wide.isna()
+    returns_ready = ~missing_returns_with_exposure.any(axis=1)
 
     return weights_ready & returns_ready
