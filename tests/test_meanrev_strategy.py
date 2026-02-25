@@ -341,28 +341,6 @@ class TestMeanRevStrategyIntegration:
         assert signals.notna().sum() > 0
         assert len(signals) == 150
     
-    def test_calculate_returns_signal_lag(self):
-        """Test that returns use lagged signals (no look-ahead bias)."""
-        dates = pd.date_range('2020-01-01', periods=150)
-        prices = 100 + 10 * np.sin(np.linspace(0, 4 * np.pi, 150))
-        ohlcv = pd.DataFrame({
-            'close': prices,
-            'raw_ret': np.random.randn(150) * 0.01,
-        }, index=dates)
-        
-        strategy = MeanRevStrategy()
-        signals = strategy.generate_signals(ohlcv)
-        meta_returns = strategy.calculate_returns(ohlcv)
-        
-        # meta_ret[t] should use signal[t-1]
-        first_valid_signal_idx = signals.first_valid_index()
-        if first_valid_signal_idx is not None:
-            signal_loc = ohlcv.index.get_loc(first_valid_signal_idx)
-            if signal_loc + 1 < len(ohlcv):
-                next_date = ohlcv.index[signal_loc + 1]
-                expected = signals.loc[first_valid_signal_idx] * ohlcv.loc[next_date, 'raw_ret']
-                assert abs(meta_returns.loc[next_date] - expected) < 1e-10
-    
     def test_run_with_real_data(self):
         """Test full run() with real market data."""
         data = load_universe(["SPY"], "2020-01-01", "2020-12-31")
@@ -372,11 +350,15 @@ class TestMeanRevStrategyIntegration:
         
         spy_df = result["SPY"]
         
-        # Should have meta_raw_ret column
-        assert 'meta_raw_ret' in spy_df.columns
+        # Should have signal column (not meta_raw_ret)
+        assert 'signal' in spy_df.columns
         
-        # Should have some valid returns after warmup
-        assert spy_df['meta_raw_ret'].notna().sum() > 0
+        # Should have some valid signals after warmup
+        assert spy_df['signal'].notna().sum() > 0
+        
+        # Signals should be discrete {-1, 0, 1}
+        valid_signals = spy_df['signal'].dropna()
+        assert valid_signals.isin([-1, 0, 1]).all()
         
         # Warmup period should be 60 (default)
         assert strategy.get_warmup_period() == 60
@@ -395,11 +377,9 @@ class TestMeanRevStrategyEdgeCases:
         
         strategy = MeanRevStrategy()
         signals = strategy.generate_signals(ohlcv)
-        meta_returns = strategy.calculate_returns(ohlcv)
         
         # Should not crash
         assert len(signals) == 150
-        assert len(meta_returns) == 150
     
     def test_meanrev_with_missing_data(self):
         """Test strategy handles NaN values gracefully."""
@@ -417,10 +397,8 @@ class TestMeanRevStrategyEdgeCases:
         
         # Should not crash
         signals = strategy.generate_signals(ohlcv)
-        meta_returns = strategy.calculate_returns(ohlcv)
         
         assert len(signals) == 150
-        assert len(meta_returns) == 150
     
     def test_meanrev_low_volatility(self):
         """Test strategy with very low volatility (BB bands collapse)."""
@@ -436,10 +414,8 @@ class TestMeanRevStrategyEdgeCases:
         
         # Should not crash even with collapsed bands
         signals = strategy.generate_signals(ohlcv)
-        meta_returns = strategy.calculate_returns(ohlcv)
         
         assert len(signals) == 150
-        assert len(meta_returns) == 150
 
     def test_rsi_sustained_uptrend_no_losses(self):
         """Test RSI returns 100 (overbought) when avg_loss=0 (sustained uptrend)."""

@@ -19,16 +19,15 @@ class TestAlignAssetReturns:
     
     def test_align_basic(self):
         """Test basic alignment of asset returns."""
-        # Load and process data
+        # Load data - use raw_ret directly (no strategy needed)
         data = load_universe(
             universe=["SPY", "QQQ", "IWM"],
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
         
-        # Align returns
-        returns_wide = align_asset_returns(strategy_output)
+        # Align returns using raw_ret column
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Check shape
         assert isinstance(returns_wide, pd.DataFrame)
@@ -47,12 +46,11 @@ class TestAlignAssetReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
         
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Check SPY returns match
-        spy_original = strategy_output["SPY"]['meta_raw_ret']
+        spy_original = data["SPY"]['raw_ret']
         spy_aligned = returns_wide["SPY"]
         
         assert (spy_original == spy_aligned).all()
@@ -94,9 +92,8 @@ class TestAlignAssetReturns:
             start_date="2020-01-01",
             end_date="2020-01-31",
         )
-        strategy_output = PassthroughStrategy().run(data)
         
-        returns_wide = align_asset_returns(strategy_output)
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         assert returns_wide.shape[1] == 1  # One column
         assert 'SPY' in returns_wide.columns
@@ -114,7 +111,8 @@ class TestBuildPortfolioRawReturns:
             end_date="2020-01-31",
         )
         strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        # Use raw_ret for portfolio constructor tests
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Create equal weights (50/50)
         weights_wide = pd.DataFrame(
@@ -143,7 +141,8 @@ class TestBuildPortfolioRawReturns:
             end_date="2020-01-31",
         )
         strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        # Use raw_ret for portfolio constructor tests
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # 100% SPY, 0% QQQ
         weights_wide = pd.DataFrame({
@@ -164,7 +163,8 @@ class TestBuildPortfolioRawReturns:
             end_date="2020-01-10",
         )
         strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        # Use raw_ret for portfolio constructor tests
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Create varying weights
         n_days = len(returns_wide)
@@ -190,7 +190,8 @@ class TestBuildPortfolioRawReturns:
             end_date="2020-01-31",
         )
         strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        # Use raw_ret for portfolio constructor tests
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Create weights with wrong shape
         weights_wrong = pd.DataFrame(
@@ -210,7 +211,8 @@ class TestBuildPortfolioRawReturns:
             end_date="2020-01-31",
         )
         strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        # Use raw_ret for portfolio constructor tests
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Create weights with different columns
         weights_wrong = pd.DataFrame(
@@ -230,7 +232,8 @@ class TestBuildPortfolioRawReturns:
             end_date="2020-01-31",
         )
         strategy_output = PassthroughStrategy().run(data)
-        returns_wide = align_asset_returns(strategy_output)
+        # Use raw_ret for portfolio constructor tests
+        returns_wide = align_asset_returns(data, return_col='raw_ret')
         
         # Create weights that sum to 1
         weights_wide = pd.DataFrame({

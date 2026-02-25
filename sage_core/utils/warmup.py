@@ -81,6 +81,7 @@ def calculate_warmup_period(
     meta_allocator: Optional[Dict[str, Any]],
     vol_window: int,
     vol_lookback: int,
+    execution_delay_days: int = 1,
 ) -> Dict[str, Any]:
     """
     Calculate total warmup period needed for all system components.
@@ -91,13 +92,14 @@ def calculate_warmup_period(
     Warmup formula (in TRADING DAYS):
         signal_warmup   = strategy_warmup + meta_allocator_warmup
         parallel_warmup = max(signal_warmup, asset_allocator_warmup)
-        total           = parallel_warmup + 1 + vol_lookback
+        total           = parallel_warmup + execution_delay_days + vol_lookback
     
     Timeline example (Trend+MeanRev, Risk Parity meta allocator, vol_window=60):
     - Day 1-253: Strategy warmup (max of Trend=253, MeanRev=60)
     - Day 1-60:  Asset allocator warmup (inverse vol, runs in parallel)
     - Day 254-313: Meta allocator warmup (Risk Parity needs 60 days)
-    - Day 314: First weights + strategy returns ready, first portfolio return
+    - Day 314: First target weights ready
+    - Day 315: First held weights (after execution_delay_days=1)
     - Day 315-374: Portfolio returns accumulate (leverage = 1.0)
     - Day 375: Vol targeting activates (60 days of portfolio returns available)
     
@@ -111,6 +113,7 @@ def calculate_warmup_period(
         meta_allocator: {'type': 'fixed_weight'|'risk_parity', 'params': {...}}
         vol_window: Lookback for inverse volatility weights (asset allocator)
         vol_lookback: Lookback for volatility targeting
+        execution_delay_days: Execution delay from ExecutionPolicy (default: 1)
     
     Returns:
         Dictionary with:
@@ -119,7 +122,7 @@ def calculate_warmup_period(
             - signal_warmup: int (strategy + meta)
             - asset_allocator_warmup: int
             - parallel_warmup: int (max of signal vs allocator)
-            - first_return: int (always 1)
+            - execution_delay: int (from ExecutionPolicy)
             - vol_targeting_warmup: int
             - total_trading_days: int
             - description: str
@@ -163,14 +166,14 @@ def calculate_warmup_period(
     # Parallel warmup: allocator uses raw price returns, not strategy returns
     parallel_warmup = max(signal_warmup, asset_allocator_warmup)
     
-    # First return day
-    first_return_day = 1
+    # Execution delay (from ExecutionPolicy)
+    execution_delay = execution_delay_days
     
     # Vol targeting warmup
     vol_targeting_warmup = vol_lookback
     
     # Total warmup (parallel model)
-    total_trading_days = parallel_warmup + first_return_day + vol_targeting_warmup
+    total_trading_days = parallel_warmup + execution_delay + vol_targeting_warmup
     
     # Build description
     signal_parts = []
@@ -183,14 +186,14 @@ def calculate_warmup_period(
         signal_str = " + ".join(signal_parts)
         description = (
             f"max({signal_str}, Allocator ({asset_allocator_warmup}d))"
-            f" + First return ({first_return_day}d)"
+            f" + Execution delay ({execution_delay}d)"
             f" + Vol targeting ({vol_targeting_warmup}d)"
             f" = {total_trading_days} trading days"
         )
     else:
         description = (
             f"Allocator ({asset_allocator_warmup}d)"
-            f" + First return ({first_return_day}d)"
+            f" + Execution delay ({execution_delay}d)"
             f" + Vol targeting ({vol_targeting_warmup}d)"
             f" = {total_trading_days} trading days"
         )
@@ -201,7 +204,7 @@ def calculate_warmup_period(
         "signal_warmup": signal_warmup,
         "asset_allocator_warmup": asset_allocator_warmup,
         "parallel_warmup": parallel_warmup,
-        "first_return": first_return_day,
+        "execution_delay": execution_delay,
         "vol_targeting_warmup": vol_targeting_warmup,
         "total_trading_days": total_trading_days,
         "description": description,

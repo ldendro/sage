@@ -236,6 +236,42 @@ class ScheduleConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ExecutionConfig(BaseModel):
+    """Configuration for execution timing.
+    
+    Controls the temporal lag between decisions and execution.
+    All components compute at time t using data <= t. The execution delay
+    converts target weights at t into held weights at t + execution_delay_days.
+    
+    Attributes:
+        signal_time: When signals are computed
+        execution_time: When trades execute
+        price_used: Which price is used for fills
+        execution_delay_days: Number of trading days to delay execution
+    """
+    
+    signal_time: Literal["close"] = Field(
+        default="close",
+        description="When signals are computed (market close)",
+    )
+    execution_time: Literal["next_open", "next_close"] = Field(
+        default="next_open",
+        description="When trades execute after signal computation",
+    )
+    price_used: Literal["open", "close"] = Field(
+        default="open",
+        description="Which price is used for trade fills",
+    )
+    execution_delay_days: int = Field(
+        default=1,
+        ge=0,
+        le=10,
+        description="Execution delay in trading days (1 = next day execution)",
+    )
+    
+    model_config = ConfigDict(extra="forbid")
+
+
 class SystemConfig(BaseModel):
     """
     Complete system configuration.
@@ -300,6 +336,11 @@ class SystemConfig(BaseModel):
     schedule: ScheduleConfig = Field(
         default_factory=ScheduleConfig,
         description="Schedule and frequency configuration"
+    )
+    
+    execution: ExecutionConfig = Field(
+        default_factory=ExecutionConfig,
+        description="Execution timing configuration (delay, fill prices)"
     )
     
     @field_validator("start_date", "end_date")

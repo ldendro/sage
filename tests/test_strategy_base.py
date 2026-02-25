@@ -18,7 +18,7 @@ class TestStrategyBase:
     
     def test_strategy_requires_all_methods(self):
         """Test that subclass must implement all abstract methods."""
-        # Create incomplete strategy (missing calculate_returns)
+        # Create incomplete strategy (missing generate_signals)
         class IncompleteStrategy(Strategy):
             def validate_params(self):
                 pass
@@ -26,16 +26,13 @@ class TestStrategyBase:
             def get_warmup_period(self):
                 return 0
             
-            def generate_signals(self, ohlcv):
-                return pd.Series(1, index=ohlcv.index)
-            
-            # Missing: calculate_returns()
+            # Missing: generate_signals()
         
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
             IncompleteStrategy()
     
     def test_strategy_run_template_method(self):
-        """Test that run() method works with valid strategy."""
+        """Test that run() stores signals, not returns."""
         # Create minimal valid strategy
         class MinimalStrategy(Strategy):
             def validate_params(self):
@@ -46,9 +43,6 @@ class TestStrategyBase:
             
             def generate_signals(self, ohlcv):
                 return pd.Series(1, index=ohlcv.index)
-            
-            def calculate_returns(self, ohlcv):
-                return ohlcv['raw_ret'] * 2  # Double the returns
         
         # Create test data
         dates = pd.date_range('2020-01-01', periods=10)
@@ -67,21 +61,28 @@ class TestStrategyBase:
         strategy = MinimalStrategy()
         result = strategy.run(asset_data)
         
-        # Verify results
+        # Verify results — strategy now stores 'signal', not 'meta_raw_ret'
         assert 'SPY' in result
         assert 'QQQ' in result
-        assert 'meta_raw_ret' in result['SPY'].columns
-        assert 'meta_raw_ret' in result['QQQ'].columns
+        assert 'signal' in result['SPY'].columns
+        assert 'signal' in result['QQQ'].columns
         
-        # Verify returns are doubled
-        assert np.allclose(
-            result['SPY']['meta_raw_ret'], 
-            asset_data['SPY']['raw_ret'] * 2
-        )
-        assert np.allclose(
-            result['QQQ']['meta_raw_ret'], 
-            asset_data['QQQ']['raw_ret'] * 2
-        )
+        # Signal should be all 1s (always long)
+        assert (result['SPY']['signal'] == 1).all()
+        assert (result['QQQ']['signal'] == 1).all()
+    
+    def test_strategy_signal_type_property(self):
+        """Test that signal_type returns 'discrete' by default."""
+        class MinimalStrategy(Strategy):
+            def validate_params(self):
+                pass
+            def get_warmup_period(self):
+                return 0
+            def generate_signals(self, ohlcv):
+                return pd.Series(1, index=ohlcv.index)
+        
+        strategy = MinimalStrategy()
+        assert strategy.signal_type == "discrete"
     
     def test_strategy_params_initialization(self):
         """Test that strategy params are properly initialized."""
@@ -95,9 +96,6 @@ class TestStrategyBase:
             
             def generate_signals(self, ohlcv):
                 return pd.Series(1, index=ohlcv.index)
-            
-            def calculate_returns(self, ohlcv):
-                return ohlcv['raw_ret']
         
         # Test with no params (should fail validation)
         with pytest.raises(ValueError, match="Missing required_param"):
@@ -119,9 +117,6 @@ class TestStrategyBase:
             
             def generate_signals(self, ohlcv):
                 return pd.Series(1, index=ohlcv.index)
-            
-            def calculate_returns(self, ohlcv):
-                return ohlcv['raw_ret']
         
         # Create test data
         dates = pd.date_range('2020-01-01', periods=5)
@@ -144,6 +139,34 @@ class TestStrategyBase:
         assert set(original_data['SPY'].columns) == original_columns
         assert original_data['SPY'].equals(original_values)
         
-        # Verify result has new column
-        assert 'meta_raw_ret' in result['SPY'].columns
-        assert 'meta_raw_ret' not in original_data['SPY'].columns
+        # Verify result has signal column (not meta_raw_ret)
+        assert 'signal' in result['SPY'].columns
+        assert 'signal' not in original_data['SPY'].columns
+    
+    def test_strategy_run_masks_warmup(self):
+        """Test that run() masks warmup period with NaN."""
+        class WarmupStrategy(Strategy):
+            def validate_params(self):
+                pass
+            
+            def get_warmup_period(self):
+                return 3
+            
+            def generate_signals(self, ohlcv):
+                return pd.Series(1, index=ohlcv.index)
+        
+        dates = pd.date_range('2020-01-01', periods=10)
+        asset_data = {
+            'SPY': pd.DataFrame({
+                'close': range(100, 110),
+                'raw_ret': [0.01] * 10,
+            }, index=dates),
+        }
+        
+        strategy = WarmupStrategy()
+        result = strategy.run(asset_data)
+        
+        # First 3 rows should be NaN (warmup)
+        assert result['SPY']['signal'].iloc[:3].isna().all()
+        # Remaining should be valid
+        assert (result['SPY']['signal'].iloc[3:] == 1).all()

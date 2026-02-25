@@ -46,15 +46,4 @@ class PassthroughStrategy(Strategy):
             Series of 1s (always long)
         """
         return pd.Series(1, index=ohlcv.index)
-    
-    def calculate_returns(self, ohlcv: pd.DataFrame) -> pd.Series:
-        """
-        Calculate strategy returns (same as raw returns).
-        
-        Args:
-            ohlcv: DataFrame with OHLCV + raw_ret
-        
-        Returns:
-            Series of raw returns (passthrough)
-        """
-        return ohlcv['raw_ret']
+

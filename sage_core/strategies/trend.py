@@ -153,13 +153,13 @@ class TrendStrategy(Strategy):
         """
         Return required warmup period.
         
-        Warmup ensures the first valid strategy return is available.
+        Warmup ensures the first valid signal is available.
+        Execution delay is handled separately by the engine.
         
         - Momentum uses pct_change(lookback), first valid at index = lookback
         - SMA/Breakout use rolling windows, first valid at index = period - 1
-        - Returns use a 1-day signal lag (signals.shift(1))
         
-        So the earliest valid return index is:
+        So the earliest valid signal index is:
             max(momentum_lookback, sma_long - 1, breakout_period - 1) + 1
         which simplifies to:
             max(momentum_lookback + 1, sma_long, breakout_period)
@@ -340,27 +340,4 @@ class TrendStrategy(Strategy):
         combined_sig = self.combine_signals(momentum_sig, ma_sig, breakout_sig)
         
         return combined_sig
-    
-    def calculate_returns(self, ohlcv: pd.DataFrame) -> pd.Series:
-        """
-        Calculate strategy returns.
-        
-        Strategy return = signal[t-1] × raw_ret[t]
-        (Use previous day's signal for today's return)
-        
-        Args:
-            ohlcv: DataFrame with OHLCV + raw_ret
-        
-        Returns:
-            Series of strategy returns (meta_raw_ret)
-        """
-        signals = self.generate_signals(ohlcv)
-        
-        # Shift signals by 1 day (use yesterday's signal for today's return)
-        # This avoids look-ahead bias
-        lagged_signals = signals.shift(1)
-        
-        # Strategy return = signal × raw_ret
-        meta_raw_ret = lagged_signals * ohlcv['raw_ret']
-        
-        return meta_raw_ret
+

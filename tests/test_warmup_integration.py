@@ -51,12 +51,12 @@ class TestWarmupLogicIntegration:
         
         warmup_info = result["warmup_info"]
         
-        # Check total: 30 (inverse vol) + 1 (first return) + 30 (vol targeting) = 61
+        # Check total: 30 (inverse vol) + 1 (execution delay) + 30 (vol targeting) = 61
         assert warmup_info["total_trading_days"] == 61
         
         # Check components
         assert warmup_info["asset_allocator_warmup"] == 30
-        assert warmup_info["first_return"] == 1
+        assert warmup_info["execution_delay"] == 1
         assert warmup_info["vol_targeting_warmup"] == 30
         
         # Check description
@@ -75,7 +75,7 @@ class TestWarmupLogicIntegration:
         # Warmup should be 20 + 1 + 40 = 61
         assert result["warmup_info"]["total_trading_days"] == 61
         assert result["warmup_info"]["asset_allocator_warmup"] == 20
-        assert result["warmup_info"]["first_return"] == 1
+        assert result["warmup_info"]["execution_delay"] == 1
         assert result["warmup_info"]["vol_targeting_warmup"] == 40
     
     def test_equal_warmup_windows(self):
