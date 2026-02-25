@@ -25,7 +25,7 @@ class TestCalculateWarmupPeriod:
         assert warmup["strategy_warmup"] == 0
         assert warmup["meta_allocator_warmup"] == 0
         assert warmup["asset_allocator_warmup"] == 60
-        assert warmup["first_return"] == 1
+        assert warmup["execution_delay"] == 1
         assert warmup["vol_targeting_warmup"] == 90
         assert "151 trading days" in warmup["description"]
     
@@ -55,7 +55,7 @@ class TestCalculateWarmupPeriod:
         # Trading days: 0 + 0 + 30 + 1 + 120 = 151
         assert warmup["total_trading_days"] == 151
         assert warmup["asset_allocator_warmup"] == 30
-        assert warmup["first_return"] == 1
+        assert warmup["execution_delay"] == 1
         assert warmup["vol_targeting_warmup"] == 120
     
     def test_minimum_values(self):
@@ -95,14 +95,13 @@ class TestCalculateWarmupPeriod:
             vol_lookback=90
         )
         
-        # Check all required keys exist
         assert "total_trading_days" in warmup
         assert "strategy_warmup" in warmup
         assert "meta_allocator_warmup" in warmup
         assert "signal_warmup" in warmup
         assert "asset_allocator_warmup" in warmup
         assert "parallel_warmup" in warmup
-        assert "first_return" in warmup
+        assert "execution_delay" in warmup
         assert "vol_targeting_warmup" in warmup
         assert "description" in warmup
         
@@ -129,7 +128,7 @@ class TestCalculateWarmupPeriod:
         assert "151" in description  # Total trading days
         assert "Allocator" in description
         assert "Vol targeting" in description
-        assert "First return" in description
+        assert "Execution delay" in description
         assert "trading days" in description
 
 
@@ -254,7 +253,7 @@ class TestIntegratedWarmupCalculation:
         assert warmup['signal_warmup'] == 253
         assert warmup['asset_allocator_warmup'] == 60
         assert warmup['parallel_warmup'] == 253
-        assert warmup['first_return'] == 1
+        assert warmup['execution_delay'] == 1
         assert warmup['vol_targeting_warmup'] == 60
         assert warmup['total_trading_days'] == 314
     
@@ -289,7 +288,7 @@ class TestIntegratedWarmupCalculation:
         assert warmup['signal_warmup'] == 313
         assert warmup['asset_allocator_warmup'] == 60
         assert warmup['parallel_warmup'] == 313
-        assert warmup['first_return'] == 1
+        assert warmup['execution_delay'] == 1
         assert warmup['vol_targeting_warmup'] == 60
         assert warmup['total_trading_days'] == 374
     
@@ -306,6 +305,6 @@ class TestIntegratedWarmupCalculation:
         assert 'Strategy (253d)' in description
         assert 'Meta (60d)' in description
         assert 'Allocator (60d)' in description
-        assert 'First return (1d)' in description
+        assert 'Execution delay (1d)' in description
         assert 'Vol targeting (60d)' in description
         assert '374 trading days' in description

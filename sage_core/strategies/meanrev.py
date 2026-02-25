@@ -178,6 +178,7 @@ class MeanRevStrategy(Strategy):
         Return required warmup period.
         
         Warmup = max of all indicator lookbacks to ensure all have valid data.
+        Execution delay is handled separately by the engine.
         
         Returns:
             Warmup period in trading days
@@ -382,27 +383,4 @@ class MeanRevStrategy(Strategy):
         combined_sig = self.combine_signals(rsi_sig, bb_sig, zscore_sig)
         
         return combined_sig
-    
-    def calculate_returns(self, ohlcv: pd.DataFrame) -> pd.Series:
-        """
-        Calculate strategy returns.
-        
-        Strategy return = signal[t-1] × raw_ret[t]
-        (Use previous day's signal for today's return)
-        
-        Args:
-            ohlcv: DataFrame with OHLCV + raw_ret
-        
-        Returns:
-            Series of strategy returns (meta_raw_ret)
-        """
-        signals = self.generate_signals(ohlcv)
-        
-        # Shift signals by 1 day (use yesterday's signal for today's return)
-        # This avoids look-ahead bias
-        lagged_signals = signals.shift(1)
-        
-        # Strategy return = signal × raw_ret
-        meta_raw_ret = lagged_signals * ohlcv['raw_ret']
-        
-        return meta_raw_ret
+

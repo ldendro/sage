@@ -1,5 +1,5 @@
 """
-Tests for strategies.
+Tests for PassthroughStrategy.
 """
 
 import pytest
@@ -24,11 +24,12 @@ class TestPassthroughStrategy:
         strategy = PassthroughStrategy()
         result = strategy.run(data)
         
-        # Check both symbols
+        # Check both symbols have signal column
         for symbol in ["SPY", "QQQ"]:
             df = result[symbol]
-            assert 'meta_raw_ret' in df.columns
-            assert (df['meta_raw_ret'] == df['raw_ret']).all()
+            assert 'signal' in df.columns
+            # Passthrough signal is always 1
+            assert (df['signal'] == 1).all()
     
     def test_passthrough_warmup_period(self):
         """Test that passthrough returns 0 warmup."""
@@ -48,16 +49,7 @@ class TestPassthroughStrategy:
         assert len(signals) == 10
         assert (signals == 1).all()
     
-    def test_passthrough_returns(self):
-        """Test that passthrough returns equal raw returns."""
-        dates = pd.date_range('2020-01-01', periods=10)
-        ohlcv = pd.DataFrame({
-            'close': np.random.randn(10) + 100,
-            'raw_ret': np.random.randn(10) * 0.01,
-        }, index=dates)
-        
+    def test_passthrough_signal_type(self):
+        """Test that passthrough signal type is discrete."""
         strategy = PassthroughStrategy()
-        meta_returns = strategy.calculate_returns(ohlcv)
-        
-        assert len(meta_returns) == 10
-        assert (meta_returns == ohlcv['raw_ret']).all()
+        assert strategy.signal_type == "discrete"

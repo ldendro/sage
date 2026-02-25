@@ -315,6 +315,8 @@ class TestIntegration:
         from sage_core.strategies.trend import TrendStrategy
         from sage_core.strategies.meanrev import MeanRevStrategy
         from sage_core.data.loader import load_universe
+        from sage_core.execution.policy import ExecutionPolicy
+        from sage_core.execution.module import ExecutionModule
         
         # Load data
         data = load_universe(["SPY"], "2020-01-01", "2023-12-31")
@@ -326,13 +328,21 @@ class TestIntegration:
         trend_result = trend.run(data)
         meanrev_result = meanrev.run(data)
         
-        # Extract returns
-        trend_returns = trend_result["SPY"]["meta_raw_ret"]
-        meanrev_returns = meanrev_result["SPY"]["meta_raw_ret"]
+        # Use ExecutionModule to convert signals → returns
+        em = ExecutionModule(ExecutionPolicy())
+        
+        trend_meta = em.compute_meta_raw_returns(
+            intent_by_asset={'SPY': trend_result['SPY']['signal']},
+            raw_returns_by_asset={'SPY': data['SPY']['raw_ret']},
+        )
+        meanrev_meta = em.compute_meta_raw_returns(
+            intent_by_asset={'SPY': meanrev_result['SPY']['signal']},
+            raw_returns_by_asset={'SPY': data['SPY']['raw_ret']},
+        )
         
         strategy_returns = {
-            "trend": trend_returns,
-            "meanrev": meanrev_returns
+            "trend": trend_meta['SPY'],
+            "meanrev": meanrev_meta['SPY'],
         }
         
         # Allocate
@@ -367,6 +377,8 @@ class TestIntegration:
         from sage_core.strategies.trend import TrendStrategy
         from sage_core.strategies.meanrev import MeanRevStrategy
         from sage_core.data.loader import load_universe
+        from sage_core.execution.policy import ExecutionPolicy
+        from sage_core.execution.module import ExecutionModule
         
         # Load data
         data = load_universe(["SPY"], "2020-01-01", "2023-12-31")
@@ -378,13 +390,21 @@ class TestIntegration:
         trend_result = trend.run(data)
         meanrev_result = meanrev.run(data)
         
-        # Extract returns
-        trend_returns = trend_result["SPY"]["meta_raw_ret"]
-        meanrev_returns = meanrev_result["SPY"]["meta_raw_ret"]
+        # Use ExecutionModule to convert signals → returns
+        em = ExecutionModule(ExecutionPolicy())
+        
+        trend_meta = em.compute_meta_raw_returns(
+            intent_by_asset={'SPY': trend_result['SPY']['signal']},
+            raw_returns_by_asset={'SPY': data['SPY']['raw_ret']},
+        )
+        meanrev_meta = em.compute_meta_raw_returns(
+            intent_by_asset={'SPY': meanrev_result['SPY']['signal']},
+            raw_returns_by_asset={'SPY': data['SPY']['raw_ret']},
+        )
         
         strategy_returns = {
-            "trend": trend_returns,
-            "meanrev": meanrev_returns
+            "trend": trend_meta['SPY'],
+            "meanrev": meanrev_meta['SPY'],
         }
         
         # Allocate

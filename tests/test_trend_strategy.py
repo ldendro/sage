@@ -391,29 +391,6 @@ class TestTrendStrategyIntegration:
         # Should be mostly long after warmup
         assert signals.iloc[-50:].mean() > 0.5
     
-    def test_calculate_returns_signal_lag(self):
-        """Test that returns use lagged signals (no look-ahead bias)."""
-        dates = pd.date_range('2020-01-01', periods=300)
-        ohlcv = pd.DataFrame({
-            'close': np.linspace(100, 150, 300),
-            'raw_ret': np.random.randn(300) * 0.01,
-        }, index=dates)
-        
-        strategy = TrendStrategy()
-        signals = strategy.generate_signals(ohlcv)
-        meta_returns = strategy.calculate_returns(ohlcv)
-        
-        # meta_ret[t] should use signal[t-1]
-        # First valid meta_return should be at index where signal[t-1] exists
-        first_valid_signal_idx = signals.first_valid_index()
-        if first_valid_signal_idx is not None:
-            signal_loc = ohlcv.index.get_loc(first_valid_signal_idx)
-            if signal_loc + 1 < len(ohlcv):
-                next_date = ohlcv.index[signal_loc + 1]
-                # meta_ret at next_date should equal signal at first_valid * raw_ret at next_date
-                expected = signals.loc[first_valid_signal_idx] * ohlcv.loc[next_date, 'raw_ret']
-                assert abs(meta_returns.loc[next_date] - expected) < 1e-10
-    
     def test_run_with_real_data(self):
         """Test full run() with real market data."""
         # Use 2 years of data since TrendStrategy has 253-day warmup
@@ -424,15 +401,19 @@ class TestTrendStrategyIntegration:
         
         spy_df = result["SPY"]
         
-        # Should have meta_raw_ret column
-        assert 'meta_raw_ret' in spy_df.columns
+        # Should have signal column (not meta_raw_ret)
+        assert 'signal' in spy_df.columns
         
         # First warmup days should be NaN
         warmup = strategy.get_warmup_period()
-        assert spy_df['meta_raw_ret'].iloc[:warmup].isna().all()
+        assert spy_df['signal'].iloc[:warmup].isna().all()
         
-        # Should have valid returns after warmup
-        assert spy_df['meta_raw_ret'].iloc[warmup:].notna().sum() > 0
+        # Should have valid signals after warmup
+        assert spy_df['signal'].iloc[warmup:].notna().sum() > 0
+        
+        # Signals should be discrete {-1, 0, 1}
+        valid_signals = spy_df['signal'].dropna()
+        assert valid_signals.isin([-1, 0, 1]).all()
         
         # Warmup period should be 253 (default)
         assert strategy.get_warmup_period() == 253
@@ -451,11 +432,9 @@ class TestTrendStrategyEdgeCases:
         
         strategy = TrendStrategy()
         signals = strategy.generate_signals(ohlcv)
-        meta_returns = strategy.calculate_returns(ohlcv)
         
         # Should not crash
         assert len(signals) == 300
-        assert len(meta_returns) == 300
     
     def test_trend_with_missing_data(self):
         """Test strategy handles NaN values gracefully."""
@@ -472,10 +451,8 @@ class TestTrendStrategyEdgeCases:
         
         # Should not crash
         signals = strategy.generate_signals(ohlcv)
-        meta_returns = strategy.calculate_returns(ohlcv)
         
         assert len(signals) == 300
-        assert len(meta_returns) == 300
     
     def test_breakout_signal_narrow_range_overlap(self):
         """Test breakout signal when range is narrow (both high and low bands overlap)."""

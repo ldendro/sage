@@ -134,6 +134,9 @@ class RiskParityAllocator(MetaAllocator):
         row_sums = weights.sum(axis=1)
         row_sums = row_sums.replace(0, 1)  # Avoid division by zero
         weights = weights.div(row_sums, axis=0)
-        weights = weights.shift(1) # Avoid lookahead bias
+        
+        # NOTE: No shift applied here. Per the design contract, the meta
+        # allocator computes at time t using data <= t. The engine's
+        # ExecutionModule applies the single execution delay.
         
         return weights

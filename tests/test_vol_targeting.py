@@ -47,8 +47,9 @@ class TestApplyVolTargeting:
         # Check index matches
         assert scaled.index.equals(weights.index)
         
-        # First lookback days should have leverage = 1.0 (warmup + shift)
-        assert np.allclose(scaled.iloc[:20], weights.iloc[:20])
+        # First (lookback-1) days should have leverage = 1.0 (warmup)
+        # Day lookback-1 is the first day with valid rolling vol (no shift)
+        assert np.allclose(scaled.iloc[:19], weights.iloc[:19])
     
     def test_vol_targeting_scales_weights(self):
         """Test that vol targeting scales weights correctly."""
@@ -197,8 +198,8 @@ class TestApplyVolTargeting:
             lookback=lookback,
         )
         
-        # First lookback days should have leverage = 1.0 (warmup + shift)
-        warmup_leverage = (scaled.iloc[:lookback] / weights.iloc[:lookback])
+        # First (lookback-1) days should have leverage = 1.0 (warmup)
+        warmup_leverage = (scaled.iloc[:lookback-1] / weights.iloc[:lookback-1])
         assert np.allclose(warmup_leverage, 1.0)
     
     def test_vol_targeting_no_lookahead_bias(self):
@@ -223,14 +224,14 @@ class TestApplyVolTargeting:
             lookback=lookback,
         )
         
-        # The leverage on day 50 should NOT be affected by day 50's return
-        # It should only use returns through day 49
-        # So the spike on day 50 should affect leverage starting on day 51
+        # The spike on day 50 is included in the rolling vol at day 50
+        # (no shift), so leverage changes at day 50 itself.
+        # Verify leverage at day 49 (pre-spike) vs day 50 (post-spike)
+        leverage_day_49 = (scaled.iloc[49] / weights.iloc[49]).mean()
         leverage_day_50 = (scaled.iloc[50] / weights.iloc[50]).mean()
-        leverage_day_51 = (scaled.iloc[51] / weights.iloc[51]).mean()
         
-        # Day 51's leverage should be lower than day 50's (due to spike increasing vol)
-        assert leverage_day_51 < leverage_day_50
+        # Day 50's leverage should be lower (spike increases vol)
+        assert leverage_day_50 < leverage_day_49
 
 
 class TestCalculatePortfolioVolatility:

@@ -42,8 +42,9 @@ def compute_inverse_vol_weights(
         
     Notes:
         - First lookback days will have NaN weights (warmup period)
-        - Rolling volatility is shifted by 1 day to prevent look-ahead bias
-        - Weights at time t only use returns through t-1
+        - Weights at time t use returns through t (inclusive)
+        - The engine's ExecutionModule applies the single execution delay
+          (target weights at t -> held weights at t+1)
         - Weights are recomputed daily based on trailing volatility
         - Higher vol → lower weight, lower vol → higher weight
         - max_weight caps individual asset weights before normalization
@@ -79,10 +80,10 @@ def compute_inverse_vol_weights(
     # Compute rolling volatility (standard deviation)
     rolling_vol = returns_wide.rolling(window=lookback, min_periods=lookback).std()
     
-    # CRITICAL: Shift by 1 to prevent look-ahead bias
-    # Weights at time t should only use returns through t-1
-    # Without shift, rolling_vol at t includes return at t (future information)
-    rolling_vol = rolling_vol.shift(1)
+    # NOTE: No shift applied here. Per the design contract, the allocator
+    # computes target weights at time t using data <= t (including t).
+    # The engine's ExecutionModule applies the single execution delay
+    # (target weights at t -> held weights at t+1).
     
     # Apply minimum volatility floor to prevent division by zero
     rolling_vol = rolling_vol.clip(lower=min_vol)
